@@ -62,7 +62,7 @@ typedef struct ASTUnit {
         exit(0);                                              \
     }
 // 你可以設置DEBUG=1來調試。記得在提交前設置回0。
-#define DEBUG 0
+#define DEBUG 1
 // 將輸入的字符數組拆分為標記鏈表。
 Token* lexer(const char* in);
 // 創建一個新的標記。

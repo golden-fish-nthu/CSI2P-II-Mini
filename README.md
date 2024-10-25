@@ -1,72 +1,72 @@
 # CSI2P II Mini Project
 
-## Introduction
+## 介绍
 
-Let's consider a CPU, which has 32 bits registers `r0`-`r255` and a 256 bytes memory.
+让我们考虑一个 CPU，它有 32 位寄存器 `r0`-`r255` 和 256 字节的内存。
 
-In this project, you need to implement a binary expression calculator.
+在这个项目中，你需要实现一个二进制表达式计算器。
 
-## Input
+## 输入
 
-The input will contain several binary expressions consisting of integers, operators, parentheses, and three variables `x`, `y`, and `z`.
+输入将包含几个由整数、运算符、括号和三个变量 `x`、`y` 和 `z` 组成的二进制表达式。
 
-The following operators will appear in this project:
+在这个项目中将出现以下运算符：
 
 - `+`, `-`, `*`, `/`, `%`
 - `=`
-- `++`, `--` (including prefix and suffix, such as `x++`, `--y`, ... and so on)
-- `+`, `-` (expressions such as `+x`, `-y`, ... and so on)
-- others such as `>>`, `+=`, are unavailable and will not appear.
+- `++`, `--`（包括前缀和后缀，如 `x++`，`--y`，等等）
+- `+`, `-`（如 `+x`，`-y`，等等）
+- 其他如 `>>`, `+=` 不可用且不会出现。
 
-At most 15 lines per testcase, 195 characters per line.
-- That is, you don't have to change the value of `MAX_LENGTH` defined in the template.
+每个测试用例最多 15 行，每行 195 个字符。
+- 也就是说，你不需要更改模板中定义的 `MAX_LENGTH` 的值。
 
-## Output
+## 输出
 
-The output is a list of assembly codes. The instruction set architecture are listed in the table below.
+输出是汇编代码的列表。指令集架构列在下表中。
 
-If the input expressions contains illegal expression, you should handle it with the error handler. For the details, please refer to [**Error Handler**](#error-handler) below.
+如果输入表达式包含非法表达式，你应该使用错误处理程序处理它。详情请参阅下面的 [**错误处理程序**](#error-handler)。
 
-The input expression is a subset of C expression, which means you can treat the input as part of C codes and get the corresponding value of `x`, `y`, and `z` if you initialize them correctly. The result of `x`, `y`, and `z` solved by your assembly should be identical to the result of C described above.
+输入表达式是 C 表达式的子集，这意味着如果你正确初始化它们，你可以将输入视为 C 代码的一部分并获得 `x`、`y` 和 `z` 的相应值。你的汇编代码解决的 `x`、`y` 和 `z` 的结果应该与上述 C 代码的结果相同。
 
-You may refer to [**Sample**](#sample) section to see examples.
+你可以参考 [**示例**](#sample) 部分查看示例。
 
-## Instruction Set Architecture
+## 指令集架构
 
-### Memory Operation
+### 内存操作
 
-| Opcode | Operand1 | Operand2 | Meaning                                                    | Cycles |
+| 操作码 | 操作数1 | 操作数2 | 含义                                                    | 周期 |
 | ------ | -------- | -------- | ---------------------------------------------------------- | ------ |
-| load   | `reg`    | `[Addr]` | Load data in memory `[Addr]` and save into register `reg`. | 200    |
-| store  | `[Addr]` | `reg`    | Store the data of register `reg` into memory `[Addr]`.     | 200    |
+| load   | `reg`    | `[Addr]` | 从内存 `[Addr]` 加载数据并保存到寄存器 `reg` 中。 | 200    |
+| store  | `[Addr]` | `reg`    | 将寄存器 `reg` 的数据存储到内存 `[Addr]` 中。     | 200    |
 
-### Arithmetic Operation
+### 算术操作
 
-| Opcode | Operand1 | Operand2 | Operand3 | Meaning                                          | Cycles |
+| 操作码 | 操作数1 | 操作数2 | 操作数3 | 含义                                          | 周期 |
 | ------ | -------- | -------- | -------- | ------------------------------------------------ | ------ |
-| add    | `rd`     | `rs1`    | `rs2`    | Perform `rs1+rs2` and save the result into `rd`. | 10     |
-| sub    | `rd`     | `rs1`    | `rs2`    | Perform `rs1-rs2` and save the result into `rd`. | 10     |
-| mul    | `rd`     | `rs1`    | `rs2`    | Perform `rs1*rs2` and save the result into `rd`. | 30     |
-| div    | `rd`     | `rs1`    | `rs2`    | Perform `rs1/rs2` and save the result into `rd`. | 50     |
-| rem    | `rd`     | `rs1`    | `rs2`    | Perform `rs1%rs2` and save the result into `rd`. | 60     |
+| add    | `rd`     | `rs1`    | `rs2`    | 执行 `rs1+rs2` 并将结果保存到 `rd` 中。 | 10     |
+| sub    | `rd`     | `rs1`    | `rs2`    | 执行 `rs1-rs2` 并将结果保存到 `rd` 中。 | 10     |
+| mul    | `rd`     | `rs1`    | `rs2`    | 执行 `rs1*rs2` 并将结果保存到 `rd` 中。 | 30     |
+| div    | `rd`     | `rs1`    | `rs2`    | 执行 `rs1/rs2` 并将结果保存到 `rd` 中。 | 50     |
+| rem    | `rd`     | `rs1`    | `rs2`    | 执行 `rs1%rs2` 并将结果保存到 `rd` 中。 | 60     |
 
-- Note that both `rs1` and `rs2` can be a register or a **non-negative integer**. However, `rd` must be a valid register.
-- All operands should be separated by spaces.
-- Using the first 8 registers has no penalty. However, using other registers would double the instruction cycle.
-  - For example, `add r0 r1 r7` cost 10 cycles, while `add r8 r0 r23` cost 20 cycles.
+- 注意，`rs1` 和 `rs2` 都可以是寄存器或**非负整数**。但是，`rd` 必须是有效的寄存器。
+- 所有操作数应以空格分隔。
+- 使用前 8 个寄存器没有惩罚。然而，使用其他寄存器会使指令周期加倍。
+  - 例如，`add r0 r1 r7` 花费 10 个周期，而 `add r8 r0 r23` 花费 20 个周期。
 
-## Identifiers
+## 标识符
 
-- The initial value of variables `x`, `y`, and `z` are stored in memory `[0]`, `[4]`, and `[8]` respectively. Before you use them, you have to load them into registers first.
-- After the evaluation of the assembly code, the answer of the variables `x`, `y`, and `z` has to be stored in memory `[0]`, `[4]`, and `[8]` respectively.
+- 变量 `x`、`y` 和 `z` 的初始值分别存储在内存 `[0]`、`[4]` 和 `[8]` 中。在使用它们之前，你必须先将它们加载到寄存器中。
+- 在汇编代码的评估之后，变量 `x`、`y` 和 `z` 的答案必须存储在内存 `[0]`、`[4]` 和 `[8]` 中。
 
-## Grammar
+## 语法
 
-Expression grammar for mini project.
+迷你项目的表达式语法。
 
-Start with "statement".
+从 "statement" 开始。
 
-Note that this only checks syntactical error such as "x++++y". However, semantic error like "5++" or "1=2+3" will pass the grammar.
+注意，这只检查语法错误，如 "x++++y"。然而，语义错误如 "5++" 或 "1=2+3" 将通过语法检查。
 
 ```
 tokens:
@@ -129,14 +129,14 @@ PRI_EXPR
     ;
 ```
 
-## Error Handler
+## 错误处理程序
 
-The expression we designed is a subset of C expression statement. That is:
+我们设计的表达式是 C 表达式语句的子集。也就是说：
 
-- If this expression cannot be compiled by GCC, it's an illegal expression.
-- Our expression cannot be split into multiple lines, and there must be a `';'` at the end of an instruction.
+- 如果这个表达式不能被 GCC 编译，它就是非法表达式。
+- 我们的表达式不能拆分成多行，并且指令末尾必须有一个 `';'`。
 
-Illegal expressions such as:
+非法表达式如：
 
 - ```
   x = 5++;
@@ -151,66 +151,66 @@ Illegal expressions such as:
   x = y 
     + 3;
   ```
-- and all expressions that cannot pass GCC compilers should be handled by error handler.
+- 以及所有不能通过 GCC 编译器的表达式都应该由错误处理程序处理。
 
-When an error occurs, no matter how much your assembly has outputted, your output **must contain `Compile Error!` with newline**.
+当发生错误时，无论你的汇编代码输出了多少，你的输出**必须包含 `Compile Error!` 并换行**。
 
-**Note that in our testcases, there won't be any undefined behavior expression.** Such as:
+**注意，在我们的测试用例中，不会有任何未定义行为的表达式。** 如：
 
-- 1/0 (divide by 0)
-- x = x++ (a variable updated twice or more in a single expression)
-- 2147483647+1 (signed overflow)
-- You may check if an expression is undefined behavior by compiling a C program with `-Wall` flag. If it is, there should be some warnings that shows the word "undefined", or refer to this [site](https://en.cppreference.com/w/cpp/language/ub).
+- 1/0（除以 0）
+- x = x++（在一个表达式中多次更新变量）
+- 2147483647+1（有符号溢出）
+- 你可以通过使用 `-Wall` 标志编译一个 C 程序来检查表达式是否为未定义行为。如果是，应该会有一些警告显示 "undefined" 这个词，或者参考这个[网站](https://en.cppreference.com/w/cpp/language/ub)。
 
-## Assembly Compiler
+## 汇编编译器
 
-ASMC - Assembly Compiler, which recognizes our ISA instructions as input, then parse them and output the value of x, y, z, and total CPU cycle. The input should end with EOF.
+ASMC - 汇编编译器，识别我们的 ISA 指令作为输入，然后解析它们并输出 x、y、z 的值和总 CPU 周期。输入应以 EOF 结束。
 
-Note that ASMC is written in C++.
+注意，ASMC 是用 C++ 编写的。
 
-### Prerequisites
+### 先决条件
 
-C++ compiler that supports standard version c++11.
+支持标准版本 c++11 的 C++ 编译器。
 
-### Compile
+### 编译
 
-- With command-line
+- 使用命令行
 
-  Run command:
+  运行命令：
 
   ```
   g++ -std=c++11 ASMC.cpp -o ASMC
   ```
 
-  The executable file will be named as "ASMC".
+  可执行文件将命名为 "ASMC"。
 
-- With codeblocks
+- 使用 codeblocks
 
-  1. Compile with codeblocks and execute.
+  1. 使用 codeblocks 编译并执行。
 
-### Instruction
+### 指令
 
-The initial value of (x, y, z) is (2, 3, 5). The final result of (x, y, z) will show up only when errors or EOF occur.
+初始值 (x, y, z) 为 (2, 3, 5)。当错误或 EOF 发生时，x、y、z 的最终结果将显示出来。
 
-**You are strongly recommended to use ASMC to debug.**
+**强烈建议你使用 ASMC 进行调试。**
 
-With command-line, you can set the value of x, y, and z with given values by the following command:
+使用命令行，你可以通过以下命令设置 x、y 和 z 的初始值：
 
 ```
 ./ASMC <x> <y> <z>
 ```
 
-Replace `<x>`, `<y>`, and `<z>` with their initial values.
+用它们的初始值替换 `<x>`、`<y>` 和 `<z>`。
 
-## Sample
+## 示例
 
-### Sample Input 1
+### 示例输入 1
 
 ```c
 x = z + 5;
 ```
 
-### Sample Output 1
+### 示例输出 1
 
 ```
 load r0 [8]
@@ -219,30 +219,30 @@ add r0 r0 r1
 store [0] r0
 ```
 
-If we initialize `(x,y,z)=(2,3,5)` and execute the input as part of C codes to see the value of `x`, `y`, and `z`, the result would be `(x,y,z)=(10,3,5)`.
+如果我们初始化 `(x,y,z)=(2,3,5)` 并将输入作为 C 代码的一部分执行以查看 `x`、`y` 和 `z` 的值，结果将是 `(x,y,z)=(10,3,5)`。
 
-Feed the output into ASMC, you'll get the result of `(x,y,z)=(10,3,5)`, which is identical to the result above, shows that the output is correct.
+将输出输入到 ASMC，你将得到 `(x,y,z)=(10,3,5)` 的结果，这与上述结果相同，表明输出是正确的。
 
-- Total cycle cost: 200(load) + 2*10(add) + 200(store) = 420 cycles.
+- 总周期成本：200（加载）+ 2*10（加法）+ 200（存储）= 420 周期。
 
-### Sample Input 2
+### 示例输入 2
 
 ```c
 x = (y++) + (++z);
 z = ++(y++);
 ```
 
-### Sample Output 2
+### 示例输出 2
 
 ```
 load r255 [128]
 Compile Error!
 ```
 
-- Note that in sample 2, the first expression is correct, while the second one causes compile error (semantic error).
-- The total cycle of compile error testcases will be recognized as 0.
+- 注意，在示例 2 中，第一个表达式是正确的，而第二个表达式导致编译错误（语义错误）。
+- 编译错误测试用例的总周期将被视为 0。
 
-### Sample Input 3
+### 示例输入 3
 
 ```c
 7 + (x = (y = 3 * 5) % 9);
@@ -250,7 +250,7 @@ z = x * y;
 z = 3;
 ```
 
-### Sample Output 3
+### 示例输出 3
 
 ```
 add r0 0 6
@@ -261,22 +261,23 @@ add r0 1 2
 store [8] r0
 ```
 
-- You don't actually need to keep the value of `x`, `y`, and `z` (i.e. `[0]`, `[4]`, and `[8]` in memory) correct after each expression, as long as the final result of `x`, `y`, and `z` is correct.
-- The instruction can be optimized, which means you can reduce the number of instructions while keeping the correctness of your answer as you wish.
+- 你实际上不需要在每个表达式之后保持 `x`、`y` 和 `z`（即内存中的 `[0]`、`[4]` 和 `[8]`）的值正确，只要 `x`、`y` 和 `z` 的最终结果是正确的。
+- 指令可以优化，这意味着你可以减少指令的数量，同时保持答案的正确性。
 
-## Restrictions
+## 限制   
 
-Function `itoa` is not allowed. Please use `sprintf` instead.
+不允许使用 `itoa` 函数。请使用 `sprintf` 代替。
 
-- Our judge system is linux-based system. `itoa` is not included in standard library. You'll receive compile error if you call `itoa` function.
+- 我们的评判系统是基于 Linux 的系统。`itoa` 不包含在标准库中。如果你调用 `itoa` 函数，你将收到编译错误。
 
-## Score
+## 评分
 
-The project includes 2 parts:
+项目包括 2 部分：
 
-1. The **6 basic testcases**, which will be provided by TAs.
-2. Contest: There will be **24 testcases** at demo time. The first-six testcases are the same as basic testcases. Besides, the code with **less total clock cycles** is better. The top 10% will **get extra points**.
+1. **6 个基本测试用例**，由助教提供。
+2. 比赛：演示时将有 **24 个测试用例**。前六个测试用例与基本测试用例相同。此外，总时钟周期**越少**的代码越好。前 10% 将**获得额外积分**。
 
-We will use ASMC and our mini project implementation to judge your code.
+我们将使用 ASMC 和我们的迷你项目实现来评判你的代码。
 
-**If your program runs more than 5 seconds in one testcase or exceeds 512MB in memory usage, you will get zero point at that testcase.**
+**如果你的程序在一个测试用例中运行超过 5 秒或内存使用超过 512MB，你将在该测试用例中得零分。**
+
