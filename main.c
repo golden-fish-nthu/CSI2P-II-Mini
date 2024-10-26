@@ -393,23 +393,23 @@ void semantic_check(AST *now) {
     semantic_check(now->rhs);
 }
 
-int is_constant(AST *root) { // check is constant or not
+int is_constant(AST *root) { // 檢查是否為常數
     while (root->kind == LPAR) {
         if (root->mid->kind == LPAR)
-            root = root->mid; // continue find
+            root = root->mid; // 繼續查找
         else if (root->mid->kind == CONSTANT)
-            return 1; // have constant
+            return 1; // 有常數
         else
             return 0;
     }
 }
 
-int have_identifier(AST *root) { // check have identifier or not
+int have_identifier(AST *root) { // 檢查是否有標識符
     while (root->kind == LPAR) {
         if (root->mid->kind == LPAR)
-            root = root->mid; // continue find
+            root = root->mid; // 繼續查找
         else if (root->mid->kind == IDENTIFIER)
-            return root->mid->val; // return x/y/z
+            return root->mid->val; // 返回 x/y/z
         else
             return 0;
     }
@@ -418,20 +418,20 @@ int have_identifier(AST *root) { // check have identifier or not
 int get_register_for_variable(char var) {
     switch (var) {
     case 'x':
-        return 0; // x save in memory[0]
+        return 0; // x 存儲在 memory[0]
     case 'y':
-        return 4; // y save in memory[4]
+        return 4; // y 存儲在 memory[4]
     case 'z':
-        return 8; // z save in memory[8]
+        return 8; // z 存儲在 memory[8]
     default:
-        return -1; // error
+        return -1; // 錯誤
     }
 }
 
 int codegen(AST *root) {
     if (root == NULL)
         return -1;
-    int left, right, r, is_lc, is_rc, vr; // variable of register
+    int left, right, r, is_lc, is_rc, vr; // 寄存器變量
     switch (root->kind) {
     case ASSIGN:
         vr = (have_identifier(root->lhs) == 0) ? root->lhs->val : have_identifier(root->lhs); // 判斷xyz
