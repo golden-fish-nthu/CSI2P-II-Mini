@@ -266,7 +266,7 @@ AST *parse(Token *arr, int l, int r, GrammarState S) {
         return parse(arr, l, r, UNARY_EXPR);
         // TODO: 實現MUL_EXPR。
         // 提示：參考ADD_EXPR。
-    case UNARY_EXPR:
+    case UNARY_EXPR://負數無法處裡
         if (arr[l].kind == SUB || arr[l].kind == PREINC || arr[l].kind == PREDEC) {
             now = new_AST(arr[l].kind, 0);
             now->mid = parse(arr, l + 1, r, UNARY_EXPR);
@@ -300,7 +300,38 @@ AST *parse(Token *arr, int l, int r, GrammarState S) {
         err("Unexpected grammar state.");
     }
 }
-
+/*case UNARY_EXPR:
+        if (arr[l].kind == SUB || arr[l].kind == PREINC || arr[l].kind == PREDEC)
+        {
+            now = new_AST(arr[l].kind, 0);
+            now->mid = parse(arr, l + 1, r, UNARY_EXPR);
+            return now;
+        }
+        return parse(arr, l, r, POSTFIX_EXPR);
+    // TODO: 實現UNARY_EXPR。
+    // 提示：參考POSTFIX_EXPR。
+    case POSTFIX_EXPR:
+        if (arr[r].kind == PREINC || arr[r].kind == PREDEC)
+        {
+            // 將"PREINC"、"PREDEC"轉換為"POSTINC"、"POSTDEC"
+            now = new_AST(arr[r].kind - PREINC + POSTINC, 0);
+            now->mid = parse(arr, l, r - 1, POSTFIX_EXPR);
+            return now;
+        }
+        return parse(arr, l, r, PRI_EXPR);
+    case PRI_EXPR:
+        if (findNextSection(arr, l, r, condRPAR) == r)
+        {
+            now = new_AST(LPAR, 0);
+            now->mid = parse(arr, l + 1, r - 1, EXPR);
+            return now;
+        }
+        if (l == r)
+        {
+            if (arr[l].kind == IDENTIFIER || arr[l].kind == CONSTANT)
+                return new_AST(arr[l].kind, arr[l].val);
+            err("Unexpected token during parsing.");
+        }*/
 AST *new_AST(Kind kind, int val) {
     AST *res = (AST *)malloc(sizeof(AST));
     res->kind = kind;
