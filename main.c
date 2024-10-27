@@ -66,7 +66,7 @@ typedef struct {
         exit(0);                                                                                                       \
     }
 // 你可以設置DEBUG=1來調試。記得在提交前設置回0。
-#define DEBUG 0
+#define DEBUG 1
 // 將輸入的字符數組拆分為標記鏈表。
 
 Token *lexer(const char *in);
@@ -114,21 +114,21 @@ int main() {
         instructions[i].instruction[0] = '\0';
     }
 
-    // Open the test.txt file
-    FILE *file = fopen("go.txt", "r");
-    if (file == NULL) {
-        perror("Failed to open file");
-        return 1;
-    }
+    // // Open the test.txt file
+    // FILE *file = fopen("go.txt", "r");
+    // if (file == NULL) {
+    //     perror("Failed to open file");
+    //     return 1;
+    // }
 
     // Read multiple instructions from the file
-    while (instruction_count < MAX_INSTRUCTIONS && fgets(input, MAX_LENGTH, file) != NULL) {
+    while (instruction_count < MAX_INSTRUCTIONS && fgets(input, MAX_LENGTH, stdin) != NULL) {
         strncpy(instructions[instruction_count].instruction, input, MAX_LENGTH - 1);
         instructions[instruction_count].instruction[MAX_LENGTH - 1] = '\0';
         instruction_count++;
     }
 
-    fclose(file);
+    // fclose(file);
 
     // Iterate over the instruction list
     for (int i = 0; i < instruction_count; i++) {
@@ -138,8 +138,9 @@ int main() {
         if (len == 0)
             continue;
         AST *ast_root = parser(content, len);
-        // token_print(content, len);
         // AST_print(ast_root);
+        // token_print(content, len);
+        //  AST_print(ast_root);
         semantic_check(ast_root);
         codegen(ast_root);
         putchar('\n');
@@ -295,9 +296,9 @@ AST *parse(Token *arr, int l, int r, GrammarState S) {
             err("Unexpected end of expression.");
         if (arr[l].kind == SUB || arr[l].kind == MINUS || arr[l].kind == PREINC ||
             arr[l].kind == PREDEC) { // 一元運算符
-            if (arr[l].kind == MINUS) {
-                err("Negative numbers are not allowed.");
-            }
+            // if (arr[l].kind == MINUS) {
+            //     err("Negative numbers are not allowed.");
+            // }
             now = new_AST(arr[l].kind, 0);
             now->mid = parse(arr, l + 1, r, UNARY_EXPR);
             return now;
