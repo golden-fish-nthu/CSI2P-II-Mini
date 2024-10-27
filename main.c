@@ -92,6 +92,7 @@ void freeAST(AST *now);
 void token_print(Token *in, size_t len);
 // 打印AST樹。
 void AST_print(AST *head);
+int get_register_for_variable(char var);
 char input[MAX_LENGTH];
 int main() {
     while (fgets(input, MAX_LENGTH, stdin) != NULL) {
