@@ -3,10 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-int reg[256] = {0}; // 0 = not used, 1 = used
+
+#define NUM_REGISTERS 15
 #define MAX_LENGTH 200
 #define MAX_INSTRUCTIONS 100
-#define NUM_REGISTERS 12
 
 typedef struct {
     char instruction[MAX_LENGTH];
@@ -54,6 +54,10 @@ typedef struct {
     Kind kinds;
     int val;
 } NodeInfo;
+typedef struct {
+    bool in_use;
+    Token token;
+} Register;
 
 /// 工具接口
 #define err(x)                                                                                                         \
@@ -102,8 +106,12 @@ void token_print(Token *in, size_t len);
 // 打印AST樹。
 void AST_print(AST *head);
 int get_register_for_variable(char var);
+void init_registers();
+Register *assign_register(Token token);
 void free_register(int reg_num);
+
 char input[MAX_LENGTH];
+Register registers[NUM_REGISTERS];
 
 int main() {
     Instruction instructions[MAX_INSTRUCTIONS];
@@ -114,21 +122,21 @@ int main() {
         instructions[i].instruction[0] = '\0';
     }
 
-    // // Open the test.txt file
-    // FILE *file = fopen("go.txt", "r");
-    // if (file == NULL) {
-    //     perror("Failed to open file");
-    //     return 1;
-    // }
+    // Open the test.txt file
+    FILE *file = fopen("testcase/test5.in", "r");
+    if (file == NULL) {
+        perror("Failed to open file");
+        return 1;
+    }
 
     // Read multiple instructions from the file
-    while (instruction_count < MAX_INSTRUCTIONS && fgets(input, MAX_LENGTH, stdin) != NULL) {
+    while (instruction_count < MAX_INSTRUCTIONS && fgets(input, MAX_LENGTH, file) != NULL) {
         strncpy(instructions[instruction_count].instruction, input, MAX_LENGTH - 1);
         instructions[instruction_count].instruction[MAX_LENGTH - 1] = '\0';
         instruction_count++;
     }
 
-    // fclose(file);
+    fclose(file);
 
     // Iterate over the instruction list
     for (int i = 0; i < instruction_count; i++) {
@@ -138,10 +146,10 @@ int main() {
         if (len == 0)
             continue;
         AST *ast_root = parser(content, len);
-        // AST_print(ast_root);
         // token_print(content, len);
-        //  AST_print(ast_root);
+        // AST_print(ast_root);
         semantic_check(ast_root);
+        init_registers();
         codegen(ast_root);
         putchar('\n');
         free(content);
@@ -292,10 +300,8 @@ AST *parse(Token *arr, int l, int r, GrammarState S) {
         }
         return parse(arr, l, r, UNARY_EXPR);
     case UNARY_EXPR:
-        if (l > r)
-            err("Unexpected end of expression.");
-        if (arr[l].kind == SUB || arr[l].kind == MINUS || arr[l].kind == PREINC ||
-            arr[l].kind == PREDEC) { // 一元運算符
+        if (arr[l].kind == SUB || arr[l].kind == MINUS || arr[l].kind == PREINC || arr[l].kind == PREDEC ||
+            arr[l].kind == PLUS) { // 一元運算符
             // if (arr[l].kind == MINUS) {
             //     err("Negative numbers are not allowed.");
             // }
@@ -322,7 +328,7 @@ AST *parse(Token *arr, int l, int r, GrammarState S) {
                 return new_AST(arr[l].kind, arr[l].val);
             err("Unexpected token during parsing.");
         }
-        // printf("Error at line: %d, l: %d, r: %d\n", __LINE__, l, r);
+        printf("Error at line: %d, l: %d, r: %d\n", __LINE__, l, r);
         err("No token left for parsing.");
     default:
         err("Unexpected grammar state.");
@@ -402,12 +408,6 @@ int get_register_for_variable(char var) {
     }
 }
 
-void free_register(int reg_num) {
-    if (reg_num >= 0 && reg_num < 256) {
-        reg[reg_num] = 0;
-    }
-}
-
 NodeInfo get_node_info(AST *root) {
     NodeInfo info = {root->kind, root->val}; // 初始化結果
 
@@ -428,12 +428,42 @@ NodeInfo get_node_info(AST *root) {
     return info;
 }
 
+void init_registers() {
+    for (int i = 0; i < NUM_REGISTERS; i++)
+        registers[i].in_use = false;
+}
+
+Register *assign_register(Token token) {
+    // 遍歷暫存器列表
+    for (int i = 0; i < NUM_REGISTERS; i++)
+        if (registers[i].in_use && registers[i].token.kind == token.kind &&
+            registers[i].token.val == token.val) // 找到匹配的暫存器
+            return &registers[i];
+    // 如果沒有找到匹配的暫存器，分配一個新的暫存器
+    for (int i = 0; i < NUM_REGISTERS; i++) {
+        if (!registers[i].in_use) {
+            registers[i].in_use = true;
+            registers[i].token = token;
+            return &registers[i];
+        }
+    }
+    // 如果所有暫存器都在使用中，返回 NULL
+    return NULL;
+}
+
+void free_register(int reg_num) {
+    if (reg_num >= 0 && reg_num < NUM_REGISTERS) {
+        registers[reg_num].in_use = false;
+    }
+}
+
 int codegen(AST *root) {
     if (root == NULL)
         return -1;
-    int left, right, r; // 寄存器變量
+    int left, right, r, is_lc, is_rc; // 寄存器變量
     NodeInfo node_info;
     int vr;
+    Token token;
     switch (root->kind) {
     case ASSIGN:
         node_info = get_node_info(root->lhs);
@@ -444,33 +474,31 @@ int codegen(AST *root) {
         right = codegen(root->rhs);
         node_info = get_node_info(root->rhs);
         if (node_info.kinds == CONSTANT) {
-            for (int i = 0; i < 256; i++) {
-                if (reg[i] == 0) {
-                    reg[i] = 1;
-                    r = i;
-                    break;
-                }
+            Token token = {CONSTANT, root->rhs->val};
+            Register *reg = assign_register(token);
+            if (reg != NULL) {
+                r = reg - registers; // 計算暫存器索引
+                printf("add r%d %d %d\n", r, 0, right);
+                printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
+                reg->in_use = false;
+                registers[right].in_use = false;
+                return r;
             }
-            printf("add r%d %d %d\n", r, 0, right);
-            printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
-            free_register(r);
-            reg[right] = 0;
-            return r;
         } else {
             printf("store [%d] r%d\n", get_register_for_variable((char)vr), right);
-            free_register(right);
+            registers[right].in_use = false;
         }
         break;
     case ADD:
         left = codegen(root->lhs);
         right = codegen(root->rhs);
         node_info = get_node_info(root->lhs);
-        int is_lc = (node_info.kinds == CONSTANT);
+        is_lc = (node_info.kinds == CONSTANT);
         node_info = get_node_info(root->rhs);
-        int is_rc = (node_info.kinds == CONSTANT);
+        is_rc = (node_info.kinds == CONSTANT);
         if (!is_lc && !is_rc) {
             printf("add r%d r%d r%d\n", left, left, right);
-            reg[right] = 0;
+            free_register(right);
             return left;
         } else if (!is_lc && is_rc) {
             printf("add r%d r%d %d\n", left, left, right);
@@ -479,13 +507,12 @@ int codegen(AST *root) {
             printf("add r%d %d r%d\n", right, left, right);
             return right;
         } else {
-            for (int i = 0; i < 256; i++) {
-                if (reg[i] == 0) {
-                    reg[i] = 1;
-                    r = i;
-                    break;
-                }
-            }
+            token.kind = CONSTANT;
+            token.val = left + right;
+            Register *reg = assign_register(token);
+            if (reg == NULL)
+                err("No available register.");
+            r = reg - registers;
             printf("add r%d %d %d\n", r, left, right);
             return r;
         }
@@ -499,7 +526,7 @@ int codegen(AST *root) {
         is_rc = (node_info.kinds == CONSTANT);
         if (!is_lc && !is_rc) {
             printf("sub r%d r%d r%d\n", left, left, right);
-            reg[right] = 0;
+            free_register(right);
             return left;
         } else if (!is_lc && is_rc) {
             printf("sub r%d r%d %d\n", left, left, right);
@@ -508,13 +535,12 @@ int codegen(AST *root) {
             printf("sub r%d %d r%d\n", right, left, right);
             return right;
         } else {
-            for (int i = 0; i < 256; i++) {
-                if (reg[i] == 0) {
-                    reg[i] = 1;
-                    r = i;
-                    break;
-                }
-            }
+            token.kind = CONSTANT;
+            token.val = left - right;
+            Register *reg = assign_register(token);
+            if (reg == NULL)
+                err("No available register.");
+            r = reg - registers;
             printf("sub r%d %d %d\n", r, left, right);
             return r;
         }
@@ -528,7 +554,8 @@ int codegen(AST *root) {
         is_rc = (node_info.kinds == CONSTANT);
         if (!is_lc && !is_rc) {
             printf("mul r%d r%d r%d\n", left, left, right);
-            reg[right] = 0;
+            if (left != right)
+                free_register(right);
             return left;
         } else if (!is_lc && is_rc) {
             printf("mul r%d r%d %d\n", left, left, right);
@@ -537,13 +564,12 @@ int codegen(AST *root) {
             printf("mul r%d %d r%d\n", right, left, right);
             return right;
         } else {
-            for (int i = 0; i < 256; i++) {
-                if (reg[i] == 0) {
-                    reg[i] = 1;
-                    r = i;
-                    break;
-                }
-            }
+            token.kind = CONSTANT;
+            token.val = left * right;
+            Register *reg = assign_register(token);
+            if (reg == NULL)
+                err("No available register.");
+            r = reg - registers;
             printf("mul r%d %d %d\n", r, left, right);
             return r;
         }
@@ -557,7 +583,8 @@ int codegen(AST *root) {
         is_rc = (node_info.kinds == CONSTANT);
         if (!is_lc && !is_rc) {
             printf("div r%d r%d r%d\n", left, left, right);
-            reg[right] = 0;
+            if (left != right)
+                free_register(right);
             return left;
         } else if (!is_lc && is_rc) {
             printf("div r%d r%d %d\n", left, left, right);
@@ -566,13 +593,12 @@ int codegen(AST *root) {
             printf("div r%d %d r%d\n", right, left, right);
             return right;
         } else {
-            for (int i = 0; i < 256; i++) {
-                if (reg[i] == 0) {
-                    reg[i] = 1;
-                    r = i;
-                    break;
-                }
-            }
+            token.kind = CONSTANT;
+            token.val = left / right;
+            Register *reg = assign_register(token);
+            if (reg == NULL)
+                err("No available register.");
+            r = reg - registers;
             printf("div r%d %d %d\n", r, left, right);
             return r;
         }
@@ -586,7 +612,7 @@ int codegen(AST *root) {
         is_rc = (node_info.kinds == CONSTANT);
         if (!is_lc && !is_rc) {
             printf("rem r%d r%d r%d\n", left, left, right);
-            reg[right] = 0;
+            free_register(right);
             return left;
         } else if (!is_lc && is_rc) {
             printf("rem r%d r%d %d\n", left, left, right);
@@ -595,13 +621,12 @@ int codegen(AST *root) {
             printf("rem r%d %d r%d\n", right, left, right);
             return right;
         } else {
-            for (int i = 0; i < 256; i++) {
-                if (reg[i] == 0) {
-                    reg[i] = 1;
-                    r = i;
-                    break;
-                }
-            }
+            token.kind = CONSTANT;
+            token.val = left % right;
+            Register *reg = assign_register(token);
+            if (reg == NULL)
+                err("No available register.");
+            r = reg - registers;
             printf("rem r%d %d %d\n", r, left, right);
             return r;
         }
@@ -613,8 +638,6 @@ int codegen(AST *root) {
             vr = node_info.val;
         else
             vr = root->mid->val;
-        // printf("Kind: %d, Val: %d\n", node_info.kinds, node_info.val);
-        // printf("right: %d\n", right);
         printf("add r%d r%d 1\n", right, right);
         printf("store [%d] r%d\n", get_register_for_variable((char)vr), right);
         return right;
@@ -637,17 +660,16 @@ int codegen(AST *root) {
             vr = node_info.val;
         else
             vr = root->mid->val;
-        for (int i = 0; i < 256; i++) {
-            if (reg[i] == 0) {
-                reg[i] = 1;
-                r = i;
-                break;
-            }
-        }
+        token.kind = IDENTIFIER;
+        token.val = vr;
+        Register *reg = assign_register(token);
+        if (reg == NULL)
+            err("No available register.");
+        r = reg - registers;
         printf("add r%d r%d 1\n", r, r);
         printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
-        reg[r] = 0;
-        return left;
+        free_register(r);
+        return right;
         break;
     case POSTDEC:
         right = codegen(root->mid);
@@ -656,26 +678,29 @@ int codegen(AST *root) {
             vr = node_info.val;
         else
             vr = root->mid->val;
-        for (int i = 0; i < 256; i++) {
-            if (reg[i] == 0) {
-                reg[i] = 1;
-                r = i;
-                break;
-            }
-        }
+        token.kind = IDENTIFIER;
+        token.val = vr;
+        reg = assign_register(token);
+        if (reg == NULL)
+            err("No available register.");
+        r = reg - registers;
         printf("sub r%d r%d 1\n", r, r);
         printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
-        reg[r] = 0;
-        return left;
+        free_register(r);
+        return right;
         break;
     case IDENTIFIER:
-        for (int i = 0; i < 256; i++) {
-            if (reg[i] == 0) {
-                reg[i] = 1;
-                r = i;
-                break;
+        token.kind = IDENTIFIER;
+        token.val = root->val;
+        for (int i = 0; i < NUM_REGISTERS; i++)
+            if (registers[i].in_use && registers[i].token.kind == token.kind && registers[i].token.val == token.val) {
+                // printf("same register\n");
+                return i;
             }
-        }
+        reg = assign_register(token);
+        if (reg == NULL)
+            err("No available register.");
+        r = reg - registers;
         printf("load r%d [%d]\n", r, get_register_for_variable((char)root->val));
         return r;
         break;
@@ -691,13 +716,12 @@ int codegen(AST *root) {
         node_info = get_node_info(root->mid);
         is_lc = (node_info.kinds == CONSTANT);
         if (is_lc) {
-            for (int i = 0; i < 256; i++) {
-                if (reg[i] == 0) {
-                    reg[i] = 1;
-                    r = i;
-                    break;
-                }
-            }
+            token.kind = CONSTANT;
+            token.val = -left;
+            reg = assign_register(token);
+            if (reg == NULL)
+                err("No available register.");
+            r = reg - registers;
             printf("sub r%d 0 %d\n", r, left);
             return r;
         } else {

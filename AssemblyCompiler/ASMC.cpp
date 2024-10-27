@@ -234,6 +234,15 @@ int main(int argc, char **argv) {
     string str;
     int lines = 1;
     while (getline(cin, str)) {
+        if (str == "print") {
+            auto ans = evaluate(asm_list, init);
+            int C = cycle(asm_list);
+            if (C != -1)
+                printf("x, y, z = %d, %d, %d\nTotal cycle = %d\n", get<0>(ans), get<1>(ans), get<2>(ans), C);
+            else
+                puts("CE instruction found.");
+            continue;
+        }
         if (str == "end") {
             auto ans = evaluate(asm_list, init);
             int C = cycle(asm_list);

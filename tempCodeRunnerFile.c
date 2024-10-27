@@ -1,3 +1,2 @@
-  // if (arr[l].kind == MINUS) {
-            //     err("Negative numbers are not allowed.");
-            // }
+
+    // Open the test.txt file
