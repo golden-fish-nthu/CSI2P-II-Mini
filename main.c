@@ -3,12 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 int reg[256] = {0}; // 0 = not used, 1 = used
-
-/*
-有關語言語法，請參考github頁面的語法部分：
-    https://github.com/lightbulb12294/CSI2P-II-Mini1#grammar
-*/
-
 #define MAX_LENGTH 200
 typedef enum {
     ASSIGN,
@@ -49,10 +43,11 @@ typedef struct ASTUnit {
     int val; // 記錄整數值或變量名稱
     struct ASTUnit *lhs, *mid, *rhs;
 } AST;
-
+typedef struct {
+    Kind kinds;
+    int val;
+} NodeInfo;
 /// 工具接口
-
-// 當表達式錯誤發生時應使用err宏。
 #define err(x)                                                                                                         \
     {                                                                                                                  \
         puts("Compile Error!");                                                                                        \
@@ -92,16 +87,12 @@ void semantic_check(AST *now);
 int codegen(AST *root);
 // 釋放整個AST。
 void freeAST(AST *now);
-
 /// 調試接口
-
 // 打印標記數組。
 void token_print(Token *in, size_t len);
 // 打印AST樹。
 void AST_print(AST *head);
-
 char input[MAX_LENGTH];
-
 int main() {
     while (fgets(input, MAX_LENGTH, stdin) != NULL) {
         Token *content = lexer(input);
@@ -118,7 +109,6 @@ int main() {
     }
     return 0;
 }
-
 Token *lexer(const char *in) {
     Token *head = NULL;
     Token **now = &head;
@@ -138,21 +128,18 @@ Token *lexer(const char *in) {
                 break;
             case '+':
                 if (in[i + 1] && in[i + 1] == '+') {
-                    i++;
-                    // 在lexer範圍內，所有"++"都將被標記為PREINC。
+                    i++; // 在lexer範圍內，所有"++"都將被標記為PREINC。
                     (*now) = new_token(PREINC, 0);
-                }
-                // 在lexer範圍內，所有單個"+"都將被標記為PLUS。
+                } // 在lexer範圍內，所有單個"+"都將被標記為PLUS。
                 else
                     (*now) = new_token(PLUS, 0);
                 break;
             case '-':
                 if (in[i + 1] && in[i + 1] == '-') {
-                    i++;
-                    // 在lexer範圍內，所有"--"都將被標記為PREDEC。
+                    i++; // 在lexer範圍內，所有"--"都將被標記為PREDEC。
+
                     (*now) = new_token(PREDEC, 0);
-                }
-                // 在lexer範圍內，所有單個"-"都將被標記為MINUS。
+                } // 在lexer範圍內，所有單個"-"都將被標記為MINUS。
                 else
                     (*now) = new_token(MINUS, 0);
                 break;
@@ -208,8 +195,7 @@ size_t token_list_to_arr(Token **head) {
 }
 
 AST *parser(Token *arr, size_t len) {
-    for (int i = 1; i < len; i++) {
-        // 正確識別"ADD"和"SUB"
+    for (int i = 1; i < len; i++) { // 正確識別"ADD"和"SUB"
         if (arr[i].kind == PLUS || arr[i].kind == MINUS) {
             switch (arr[i - 1].kind) {
             case PREINC:
@@ -257,7 +243,7 @@ AST *parse(Token *arr, int l, int r, GrammarState S) {
             return now;
         }
         return parse(arr, l, r, MUL_EXPR);
-    case MUL_EXPR: // 乘法符
+    case MUL_EXPR: // 乘法符 TODO
         if ((nxt = findNextSection(arr, r, l, condMUL)) != -1) {
             now = new_AST(arr[nxt].kind, 0);
             now->lhs = parse(arr, l, nxt - 1, MUL_EXPR);
@@ -265,21 +251,18 @@ AST *parse(Token *arr, int l, int r, GrammarState S) {
             return now;
         }
         return parse(arr, l, r, UNARY_EXPR);
-        // TODO: 實現MUL_EXPR。
-        // 提示：參考ADD_EXPR。
     case UNARY_EXPR:
-        if (l > r) {
+        if (l > r)
             err("Unexpected end of expression.");
-        }
-        if (arr[l].kind == MINUS || arr[l].kind == PREINC || arr[l].kind == PREDEC) {
+        if (arr[l].kind == SUB || arr[l].kind == MINUS || arr[l].kind == PREINC ||
+            arr[l].kind == PREDEC) { // 一元運算符
             now = new_AST(arr[l].kind, 0);
             now->mid = parse(arr, l + 1, r, UNARY_EXPR);
             return now;
         }
         return parse(arr, l, r, POSTFIX_EXPR);
     case POSTFIX_EXPR:
-        if (arr[r].kind == PREINC || arr[r].kind == PREDEC) {
-            // 將"PREINC"、"PREDEC"轉換為"POSTINC"、"POSTDEC"
+        if (arr[r].kind == PREINC || arr[r].kind == PREDEC) { // 將"PREINC"、"PREDEC"轉換為"POSTINC"、"POSTDEC"
             now = new_AST(arr[r].kind - PREINC + POSTINC, 0);
             now->mid = parse(arr, l, r - 1, POSTFIX_EXPR);
             return now;
@@ -296,44 +279,12 @@ AST *parse(Token *arr, int l, int r, GrammarState S) {
                 return new_AST(arr[l].kind, arr[l].val);
             err("Unexpected token during parsing.");
         }
-        printf("Error at line: %d, l: %d, r: %d\n", __LINE__, l, r);
+        // printf("Error at line: %d, l: %d, r: %d\n", __LINE__, l, r);
         err("No token left for parsing.");
     default:
         err("Unexpected grammar state.");
     }
 }
-/*case UNARY_EXPR:
-        if (arr[l].kind == SUB || arr[l].kind == PREINC || arr[l].kind == PREDEC)
-        {
-            now = new_AST(arr[l].kind, 0);
-            now->mid = parse(arr, l + 1, r, UNARY_EXPR);
-            return now;
-        }
-        return parse(arr, l, r, POSTFIX_EXPR);
-    // TODO: 實現UNARY_EXPR。
-    // 提示：參考POSTFIX_EXPR。
-    case POSTFIX_EXPR:
-        if (arr[r].kind == PREINC || arr[r].kind == PREDEC)
-        {
-            // 將"PREINC"、"PREDEC"轉換為"POSTINC"、"POSTDEC"
-            now = new_AST(arr[r].kind - PREINC + POSTINC, 0);
-            now->mid = parse(arr, l, r - 1, POSTFIX_EXPR);
-            return now;
-        }
-        return parse(arr, l, r, PRI_EXPR);
-    case PRI_EXPR:
-        if (findNextSection(arr, l, r, condRPAR) == r)
-        {
-            now = new_AST(LPAR, 0);
-            now->mid = parse(arr, l + 1, r - 1, EXPR);
-            return now;
-        }
-        if (l == r)
-        {
-            if (arr[l].kind == IDENTIFIER || arr[l].kind == CONSTANT)
-                return new_AST(arr[l].kind, arr[l].val);
-            err("Unexpected token during parsing.");
-        }*/
 AST *new_AST(Kind kind, int val) {
     AST *res = (AST *)malloc(sizeof(AST));
     res->kind = kind;
@@ -392,29 +343,6 @@ void semantic_check(AST *now) {
     semantic_check(now->mid);
     semantic_check(now->rhs);
 }
-
-int is_constant(AST *root) { // 檢查是否為常數
-    while (root->kind == LPAR) {
-        if (root->mid->kind == LPAR)
-            root = root->mid; // 繼續查找
-        else if (root->mid->kind == CONSTANT)
-            return 1; // 有常數
-        else
-            return 0;
-    }
-}
-
-int have_identifier(AST *root) { // 檢查是否有標識符
-    while (root->kind == LPAR) {
-        if (root->mid->kind == LPAR)
-            root = root->mid; // 繼續查找
-        else if (root->mid->kind == IDENTIFIER)
-            return root->mid->val; // 返回 x/y/z
-        else
-            return 0;
-    }
-}
-
 int get_register_for_variable(char var) {
     switch (var) {
     case 'x':
@@ -427,16 +355,42 @@ int get_register_for_variable(char var) {
         return -1; // 錯誤
     }
 }
+NodeInfo get_node_info(AST *root) {
+    NodeInfo info = {root->kind, root->val}; // 初始化結果
+
+    while (root->kind == LPAR) {
+        if (root->mid->kind != LPAR && root->mid->kind != CONSTANT && root->mid->kind != IDENTIFIER) {
+            info.kinds = root->mid->kind;
+            info.val = root->mid->val;
+            return info; // 是其他類型
+        }
+        if (root->mid->kind == LPAR) {
+            root = root->mid; // 繼續查找
+        } else {
+            info.kinds = root->mid->kind;
+            info.val = root->mid->val;
+            return info; // 有常數或標識符
+        }
+    }
+    return info;
+}
 
 int codegen(AST *root) {
     if (root == NULL)
         return -1;
-    int left, right, r, is_lc, is_rc, vr; // 寄存器變量
+    int left, right, r; // 寄存器變量
+    NodeInfo node_info;
+    int vr;
     switch (root->kind) {
     case ASSIGN:
-        vr = (have_identifier(root->lhs) == 0) ? root->lhs->val : have_identifier(root->lhs); // 判斷xyz
+        node_info = get_node_info(root->lhs);
+        if (node_info.kinds == IDENTIFIER)
+            vr = node_info.val;
+        else
+            vr = root->lhs->val;
         right = codegen(root->rhs);
-        if (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) {
+        node_info = get_node_info(root->rhs);
+        if (node_info.kinds == CONSTANT) {
             for (int i = 0; i < 256; i++) {
                 if (reg[i] == 0) {
                     reg[i] = 1;
@@ -445,34 +399,28 @@ int codegen(AST *root) {
                 }
             }
             printf("add r%d %d %d\n", r, 0, right);
-            printf("store [%d] r%d\n", get_register_for_variable(vr), r);
+            printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
             reg[right] = 0;
             return r;
         } else {
-            printf("store [%d] r%d\n", get_register_for_variable(vr), right);
+            printf("store [%d] r%d\n", get_register_for_variable((char)vr), right);
         }
         break;
     case ADD:
         left = codegen(root->lhs);
         right = codegen(root->rhs);
-        is_lc = 0;
-        is_rc = 0;
-        if (root->lhs->kind == CONSTANT)
-            is_lc = 1;
-        if (root->rhs->kind == CONSTANT)
-            is_rc = 1;
-        if (root->lhs->kind == LPAR && is_constant(root->lhs))
-            is_lc = 1;
-        if (root->rhs->kind == LPAR && is_constant(root->rhs))
-            is_rc = 1;
-        if ((is_lc == 0) & (is_rc == 0)) {
+        node_info = get_node_info(root->lhs);
+        int is_lc = (node_info.kinds == CONSTANT);
+        node_info = get_node_info(root->rhs);
+        int is_rc = (node_info.kinds == CONSTANT);
+        if (!is_lc && !is_rc) {
             printf("add r%d r%d r%d\n", left, left, right);
             reg[right] = 0;
             return left;
-        } else if ((is_lc == 0) & (is_rc == 1)) {
+        } else if (!is_lc && is_rc) {
             printf("add r%d r%d %d\n", left, left, right);
             return left;
-        } else if ((is_lc == 1) & (is_rc == 0)) {
+        } else if (is_lc && !is_rc) {
             printf("add r%d %d r%d\n", right, left, right);
             return right;
         } else {
@@ -490,20 +438,18 @@ int codegen(AST *root) {
     case SUB:
         left = codegen(root->lhs);
         right = codegen(root->rhs);
-        is_lc = 0;
-        is_rc = 0;
-        if (root->lhs->kind == CONSTANT)
-            is_lc = 1;
-        if (root->rhs->kind == CONSTANT)
-            is_rc = 1;
-        if ((is_lc == 0) & (is_rc == 0)) {
+        node_info = get_node_info(root->lhs);
+        is_lc = (node_info.kinds == CONSTANT);
+        node_info = get_node_info(root->rhs);
+        is_rc = (node_info.kinds == CONSTANT);
+        if (!is_lc && !is_rc) {
             printf("sub r%d r%d r%d\n", left, left, right);
             reg[right] = 0;
             return left;
-        } else if ((is_lc == 0) & (is_rc == 1)) {
+        } else if (!is_lc && is_rc) {
             printf("sub r%d r%d %d\n", left, left, right);
             return left;
-        } else if ((is_lc == 1) & (is_rc == 0)) {
+        } else if (is_lc && !is_rc) {
             printf("sub r%d %d r%d\n", right, left, right);
             return right;
         } else {
@@ -521,20 +467,18 @@ int codegen(AST *root) {
     case MUL:
         left = codegen(root->lhs);
         right = codegen(root->rhs);
-        is_lc = 0;
-        is_rc = 0;
-        if (root->lhs->kind == CONSTANT)
-            is_lc = 1;
-        if (root->rhs->kind == CONSTANT)
-            is_rc = 1;
-        if ((is_lc == 0) & (is_rc == 0)) {
+        node_info = get_node_info(root->lhs);
+        is_lc = (node_info.kinds == CONSTANT);
+        node_info = get_node_info(root->rhs);
+        is_rc = (node_info.kinds == CONSTANT);
+        if (!is_lc && !is_rc) {
             printf("mul r%d r%d r%d\n", left, left, right);
             reg[right] = 0;
             return left;
-        } else if ((is_lc == 0) & (is_rc == 1)) {
+        } else if (!is_lc && is_rc) {
             printf("mul r%d r%d %d\n", left, left, right);
             return left;
-        } else if ((is_lc == 1) & (is_rc == 0)) {
+        } else if (is_lc && !is_rc) {
             printf("mul r%d %d r%d\n", right, left, right);
             return right;
         } else {
@@ -552,20 +496,18 @@ int codegen(AST *root) {
     case DIV:
         left = codegen(root->lhs);
         right = codegen(root->rhs);
-        is_lc = 0;
-        is_rc = 0;
-        if (root->lhs->kind == CONSTANT)
-            is_lc = 1;
-        if (root->rhs->kind == CONSTANT)
-            is_rc = 1;
-        if ((is_lc == 0) & (is_rc == 0)) {
+        node_info = get_node_info(root->lhs);
+        is_lc = (node_info.kinds == CONSTANT);
+        node_info = get_node_info(root->rhs);
+        is_rc = (node_info.kinds == CONSTANT);
+        if (!is_lc && !is_rc) {
             printf("div r%d r%d r%d\n", left, left, right);
             reg[right] = 0;
             return left;
-        } else if ((is_lc == 0) & (is_rc == 1)) {
+        } else if (!is_lc && is_rc) {
             printf("div r%d r%d %d\n", left, left, right);
             return left;
-        } else if ((is_lc == 1) & (is_rc == 0)) {
+        } else if (is_lc && !is_rc) {
             printf("div r%d %d r%d\n", right, left, right);
             return right;
         } else {
@@ -583,20 +525,18 @@ int codegen(AST *root) {
     case REM:
         left = codegen(root->lhs);
         right = codegen(root->rhs);
-        is_lc = 0;
-        is_rc = 0;
-        if (root->lhs->kind == CONSTANT)
-            is_lc = 1;
-        if (root->rhs->kind == CONSTANT)
-            is_rc = 1;
-        if ((is_lc == 0) & (is_rc == 0)) {
+        node_info = get_node_info(root->lhs);
+        is_lc = (node_info.kinds == CONSTANT);
+        node_info = get_node_info(root->rhs);
+        is_rc = (node_info.kinds == CONSTANT);
+        if (!is_lc && !is_rc) {
             printf("rem r%d r%d r%d\n", left, left, right);
             reg[right] = 0;
             return left;
-        } else if ((is_lc == 0) & (is_rc == 1)) {
+        } else if (!is_lc && is_rc) {
             printf("rem r%d r%d %d\n", left, left, right);
             return left;
-        } else if ((is_lc == 1) & (is_rc == 0)) {
+        } else if (is_lc && !is_rc) {
             printf("rem r%d %d r%d\n", right, left, right);
             return right;
         } else {
@@ -613,26 +553,34 @@ int codegen(AST *root) {
         break;
     case PREINC:
         right = codegen(root->mid);
-        vr = have_identifier(root->mid);
-        if (vr == 0)
+        node_info = get_node_info(root->mid);
+        if (node_info.kinds == IDENTIFIER)
+            vr = node_info.val;
+        else
             vr = root->mid->val;
+        // printf("Kind: %d, Val: %d\n", node_info.kinds, node_info.val);
+        // printf("right: %d\n", right);
         printf("add r%d r%d 1\n", right, right);
-        printf("store [%d] r%d\n", get_register_for_variable(vr), right);
+        printf("store [%d] r%d\n", get_register_for_variable((char)vr), right);
         return right;
         break;
     case PREDEC:
         right = codegen(root->mid);
-        vr = have_identifier(root->mid);
-        if (vr == 0)
+        node_info = get_node_info(root->mid);
+        if (node_info.kinds == IDENTIFIER)
+            vr = node_info.val;
+        else
             vr = root->mid->val;
         printf("sub r%d r%d 1\n", right, right);
-        printf("store [%d] r%d\n", get_register_for_variable(vr), right);
+        printf("store [%d] r%d\n", get_register_for_variable((char)vr), right);
         return right;
         break;
     case POSTINC:
-        left = codegen(root->mid);
-        vr = have_identifier(root->mid);
-        if (vr == 0)
+        right = codegen(root->mid);
+        node_info = get_node_info(root->mid);
+        if (node_info.kinds == IDENTIFIER)
+            vr = node_info.val;
+        else
             vr = root->mid->val;
         for (int i = 0; i < 256; i++) {
             if (reg[i] == 0) {
@@ -641,15 +589,17 @@ int codegen(AST *root) {
                 break;
             }
         }
-        printf("add r%d r%d 1\n", r, left);
-        printf("store [%d] r%d\n", get_register_for_variable(vr), r);
+        printf("add r%d r%d 1\n", r, r);
+        printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
         reg[r] = 0;
         return left;
         break;
     case POSTDEC:
-        left = codegen(root->mid);
-        vr = have_identifier(root->mid);
-        if (vr == 0)
+        right = codegen(root->mid);
+        node_info = get_node_info(root->mid);
+        if (node_info.kinds == IDENTIFIER)
+            vr = node_info.val;
+        else
             vr = root->mid->val;
         for (int i = 0; i < 256; i++) {
             if (reg[i] == 0) {
@@ -658,8 +608,8 @@ int codegen(AST *root) {
                 break;
             }
         }
-        printf("sub r%d r%d 1\n", r, left);
-        printf("store [%d] r%d\n", get_register_for_variable(vr), r);
+        printf("sub r%d r%d 1\n", r, r);
+        printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
         reg[r] = 0;
         return left;
         break;
@@ -671,7 +621,7 @@ int codegen(AST *root) {
                 break;
             }
         }
-        printf("load r%d [%d]\n", r, get_register_for_variable(root->val));
+        printf("load r%d [%d]\n", r, get_register_for_variable((char)root->val));
         return r;
         break;
     case CONSTANT:
@@ -683,12 +633,9 @@ int codegen(AST *root) {
         break;
     case MINUS:
         left = codegen(root->mid);
-        is_lc = 0;
-        if (root->mid->kind == CONSTANT)
-            is_lc = 1;
-        if (root->mid->kind == LPAR && is_constant(root->mid))
-            is_lc = 1;
-        if ((is_lc == 1)) {
+        node_info = get_node_info(root->mid);
+        is_lc = (node_info.kinds == CONSTANT);
+        if (is_lc) {
             for (int i = 0; i < 256; i++) {
                 if (reg[i] == 0) {
                     reg[i] = 1;
@@ -699,7 +646,6 @@ int codegen(AST *root) {
             printf("sub r%d 0 %d\n", r, left);
             return r;
         } else {
-
             printf("sub r%d 0 r%d\n", left, left);
             return left;
         }
