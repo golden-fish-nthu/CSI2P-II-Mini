@@ -1,9 +1,16 @@
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 int reg[256] = {0}; // 0 = not used, 1 = used
 #define MAX_LENGTH 200
+#define MAX_INSTRUCTIONS 100
+#define NUM_REGISTERS 12
+
+typedef struct {
+    char instruction[MAX_LENGTH];
+} Instruction;
 typedef enum {
     ASSIGN,
     ADD,
@@ -47,6 +54,7 @@ typedef struct {
     Kind kinds;
     int val;
 } NodeInfo;
+
 /// 工具接口
 #define err(x)                                                                                                         \
     {                                                                                                                  \
@@ -58,8 +66,9 @@ typedef struct {
         exit(0);                                                                                                       \
     }
 // 你可以設置DEBUG=1來調試。記得在提交前設置回0。
-#define DEBUG 1
+#define DEBUG 0
 // 將輸入的字符數組拆分為標記鏈表。
+
 Token *lexer(const char *in);
 // 創建一個新的標記。
 Token *new_token(Kind kind, int val);
@@ -93,23 +102,52 @@ void token_print(Token *in, size_t len);
 // 打印AST樹。
 void AST_print(AST *head);
 int get_register_for_variable(char var);
+void free_register(int reg_num);
 char input[MAX_LENGTH];
+
 int main() {
-    while (fgets(input, MAX_LENGTH, stdin) != NULL) {
-        Token *content = lexer(input);
+    Instruction instructions[MAX_INSTRUCTIONS];
+    int instruction_count = 0;
+
+    // Initialize the instruction list
+    for (int i = 0; i < MAX_INSTRUCTIONS; i++) {
+        instructions[i].instruction[0] = '\0';
+    }
+
+    // Open the test.txt file
+    FILE *file = fopen("go.txt", "r");
+    if (file == NULL) {
+        perror("Failed to open file");
+        return 1;
+    }
+
+    // Read multiple instructions from the file
+    while (instruction_count < MAX_INSTRUCTIONS && fgets(input, MAX_LENGTH, file) != NULL) {
+        strncpy(instructions[instruction_count].instruction, input, MAX_LENGTH - 1);
+        instructions[instruction_count].instruction[MAX_LENGTH - 1] = '\0';
+        instruction_count++;
+    }
+
+    fclose(file);
+
+    // Iterate over the instruction list
+    for (int i = 0; i < instruction_count; i++) {
+        // printf("Instruction %d: %s", i + 1, instructions[i].instruction);
+        Token *content = lexer(instructions[i].instruction);
         size_t len = token_list_to_arr(&content);
         if (len == 0)
             continue;
         AST *ast_root = parser(content, len);
-        token_print(content, len);
-        AST_print(ast_root);
+        // token_print(content, len);
+        // AST_print(ast_root);
         semantic_check(ast_root);
         codegen(ast_root);
+        putchar('\n');
         free(content);
         freeAST(ast_root);
     }
-    return 0;
 }
+
 Token *lexer(const char *in) {
     Token *head = NULL;
     Token **now = &head;
@@ -257,6 +295,9 @@ AST *parse(Token *arr, int l, int r, GrammarState S) {
             err("Unexpected end of expression.");
         if (arr[l].kind == SUB || arr[l].kind == MINUS || arr[l].kind == PREINC ||
             arr[l].kind == PREDEC) { // 一元運算符
+            if (arr[l].kind == MINUS) {
+                err("Negative numbers are not allowed.");
+            }
             now = new_AST(arr[l].kind, 0);
             now->mid = parse(arr, l + 1, r, UNARY_EXPR);
             return now;
@@ -286,6 +327,7 @@ AST *parse(Token *arr, int l, int r, GrammarState S) {
         err("Unexpected grammar state.");
     }
 }
+
 AST *new_AST(Kind kind, int val) {
     AST *res = (AST *)malloc(sizeof(AST));
     res->kind = kind;
@@ -323,6 +365,7 @@ int condMUL(Kind kind) {
 int condRPAR(Kind kind) {
     return kind == RPAR;
 }
+
 void semantic_check(AST *now) {
     if (now == NULL)
         return;
@@ -344,6 +387,7 @@ void semantic_check(AST *now) {
     semantic_check(now->mid);
     semantic_check(now->rhs);
 }
+
 int get_register_for_variable(char var) {
     switch (var) {
     case 'x':
@@ -356,6 +400,13 @@ int get_register_for_variable(char var) {
         return -1; // 錯誤
     }
 }
+
+void free_register(int reg_num) {
+    if (reg_num >= 0 && reg_num < 256) {
+        reg[reg_num] = 0;
+    }
+}
+
 NodeInfo get_node_info(AST *root) {
     NodeInfo info = {root->kind, root->val}; // 初始化結果
 
@@ -401,10 +452,12 @@ int codegen(AST *root) {
             }
             printf("add r%d %d %d\n", r, 0, right);
             printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
+            free_register(r);
             reg[right] = 0;
             return r;
         } else {
             printf("store [%d] r%d\n", get_register_for_variable((char)vr), right);
+            free_register(right);
         }
         break;
     case ADD:
