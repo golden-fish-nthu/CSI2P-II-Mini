@@ -1,2 +1,1 @@
-
-    // Open the test.txt file
+print_register

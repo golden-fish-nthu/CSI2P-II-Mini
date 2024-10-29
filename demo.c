@@ -50,15 +50,6 @@ typedef enum {
     MINUS,
     END
 } Kind;
-typedef struct {
-    Kind kinds;
-    int val;
-} NodeInfo;
-typedef struct {
-    bool in_use;
-    bool changed;
-    Token token;
-} Register;
 
 #define err(x)                                                \
     {                                                         \
@@ -89,16 +80,11 @@ void freeAST(AST* now);
 void token_print(Token* in, size_t len);
 void AST_print(AST* head);
 int get_register_for_variable(char var);
-void init_registers();
-Register* assign_register(Token token);
-void free_register(int reg_num);
-void print_register();
 int is_constant(AST* root);
 int have_identifier(AST* root);
 int codegen2(AST* root);
 
 char input[MAX_LENGTH];
-Register registers[NUM_REGISTERS];
 int reg[NUM_REGISTERS] = {0};
 
 int main() {
@@ -106,17 +92,11 @@ int main() {
     int instruction_count = 0;
     for (int i = 0; i < MAX_INSTRUCTIONS; i++)
         instructions[i].instruction[0] = '\0';
-    // FILE* file = fopen("testcase/test4.in", "r");
-    // if (file == NULL) {
-    //     perror("Failed to open file");
-    //     return 1;
-    // }
     while (instruction_count < MAX_INSTRUCTIONS && fgets(input, MAX_LENGTH, stdin) != NULL) {
         strncpy(instructions[instruction_count].instruction, input, MAX_LENGTH - 1);
         instructions[instruction_count].instruction[MAX_LENGTH - 1] = '\0';
         instruction_count++;
     }
-    // fclose(file);
     for (int i = 0; i < instruction_count; i++) {
         Token* content = lexer(instructions[i].instruction);
         size_t len = token_list_to_arr(&content);
@@ -125,12 +105,9 @@ int main() {
         for (int i = 0; i < NUM_REGISTERS; i++)  // Initialize
             reg[i] = 0;
         AST* ast_root = parser(content, len);
-        // token_print(content, len);
-        // AST_print(ast_root);
         semantic_check(ast_root);
         init_registers();
-        codegen(ast_root);
-        // codegen2(ast_root);
+        codegen2(ast_root);
         free(content);
         freeAST(ast_root);
     }
@@ -194,14 +171,6 @@ Token* lexer(const char* in) {
         now = &((*now)->next);
     }
     return head;
-}
-
-void print_register() {  // 先註解掉
-    for (int i = 0; i < NUM_REGISTERS; i++) {
-        if (registers[i].in_use) {
-            // printf("Register r%d: in use, Token kind: %d, Token value: %d\n", i, registers[i].token.kind, registers[i].token.val);
-        }
-    }
 }
 
 Token* new_token(Kind kind, int val) {
@@ -288,10 +257,7 @@ AST* parse(Token* arr, int l, int r, GrammarState S) {
             return parse(arr, l, r, UNARY_EXPR);
         case UNARY_EXPR:
             if (arr[l].kind == SUB || arr[l].kind == MINUS || arr[l].kind == PREINC || arr[l].kind == PREDEC ||
-                arr[l].kind == PLUS) {  // 一元運算符
-                // if (arr[l].kind == MINUS) {
-                //     err("Negative numbers are not allowed.");
-                // }
+                arr[l].kind == PLUS) {
                 now = new_AST(arr[l].kind, 0);
                 now->mid = parse(arr, l + 1, r, UNARY_EXPR);
                 return now;
@@ -394,418 +360,29 @@ int get_register_for_variable(char var) {
             return -1;  // 錯誤
     }
 }
-// simplfiy use
-NodeInfo get_node_info(AST* root) {
-    NodeInfo info = {root->kind, root->val};  // 初始化結果
-
-    while (root->kind == LPAR) {
-        if (root->mid->kind != LPAR && root->mid->kind != CONSTANT && root->mid->kind != IDENTIFIER) {
-            info.kinds = root->mid->kind;
-            info.val = root->mid->val;
-            return info;  // 是其他類型
-        }
-        if (root->mid->kind == LPAR) {
-            root = root->mid;  // 繼續查找
-        } else {
-            info.kinds = root->mid->kind;
-            info.val = root->mid->val;
-            return info;  // 有常數或標識符
-        }
-    }
-    return info;
-}
-
-void init_registers() {
-    for (int i = 0; i < NUM_REGISTERS; i++) {
-        registers[i].in_use = false;
-        registers[i].changed = false;
-        registers[i].token.kind = 0;
-        registers[i].token.val = 0;
-    }
-}
-
-Register* assign_register(Token token) {
-    // 遍歷暫存器列表
-    for (int i = 0; i < NUM_REGISTERS; i++)
-        if (registers[i].in_use && !registers[i].changed && registers[i].token.kind == token.kind &&
-            registers[i].token.val == token.val)  // 找到匹配的暫存器
-            return &registers[i];
-    // 如果沒有找到匹配的暫存器，分配一個新的暫存器
-    for (int i = 0; i < NUM_REGISTERS; i++) {
-        if (!registers[i].in_use) {
-            registers[i].in_use = true;
-            registers[i].changed = false;
-            registers[i].token = token;
-            return &registers[i];
-        }
-    }
-    // 如果所有暫存器都在使用中，返回 NULL
-    return NULL;
-}
-
-void free_register(int reg_num) {
-    if (reg_num >= 0 && reg_num < NUM_REGISTERS) {
-        registers[reg_num].in_use = false;
-        registers[reg_num].changed = false;
-        registers[reg_num].token.kind = 0;
-        registers[reg_num].token.val = 0;
-    }
-}
-
-int codegen(AST* root) {
-    if (root == NULL)
-        return -1;
-    int left, right, r, is_lc, is_rc;  // 寄存器變量
-    NodeInfo node_info_left, node_info_right;
-    int vr;
-    Token token;
-    switch (root->kind) {
-        case ASSIGN:
-            node_info_left = get_node_info(root->lhs);
-            if (node_info_left.kinds == IDENTIFIER)
-                vr = node_info_left.val;
-            else
-                vr = root->lhs->val;
-            right = codegen(root->rhs);
-            node_info_right = get_node_info(root->rhs);
-            if (node_info_right.kinds == CONSTANT) {
-                Token token = {CONSTANT, root->rhs->val};
-                Register* reg = assign_register(token);
-                if (reg != NULL) {
-                    r = reg - registers;  // 計算暫存器索引
-                    printf("add r%d %d %d\n", r, 0, right);
-                    printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
-                    free_register(r);
-                    return r;
-                } else {
-                    err("No available register.");
-                }
-            } else {
-                printf("store [%d] r%d\n", get_register_for_variable((char)vr), right);
-                free_register(right);
-            }
-            break;
-        case ADD:
-            left = codegen(root->lhs);
-            right = codegen(root->rhs);
-            node_info_left = get_node_info(root->lhs);
-            is_lc = (node_info_left.kinds == CONSTANT);
-            node_info_right = get_node_info(root->rhs);
-            is_rc = (node_info_right.kinds == CONSTANT);
-            if (!is_lc && !is_rc) {
-                printf("add r%d r%d r%d\n", left, left, right);
-                registers[left].changed = true;
-                if (left != right)
-                    free_register(right);
-                return left;
-            } else if (!is_lc && is_rc) {
-                printf("add r%d r%d %d\n", left, left, right);
-                registers[left].changed = true;
-                return left;
-            } else if (is_lc && !is_rc) {
-                printf("add r%d %d r%d\n", right, left, right);
-                registers[right].changed = true;
-                return right;
-            } else {
-                token.kind = CONSTANT;
-                token.val = left + right;
-                Register* reg = assign_register(token);
-                if (reg == NULL)
-                    err("No available register.");
-                r = reg - registers;
-                printf("add r%d %d %d\n", r, left, right);
-                registers[r].changed = true;
-                return r;
-            }
-            break;
-        case SUB:
-            left = codegen(root->lhs);
-            right = codegen(root->rhs);
-            node_info_left = get_node_info(root->lhs);
-            is_lc = (node_info_left.kinds == CONSTANT);
-            node_info_right = get_node_info(root->rhs);
-            is_rc = (node_info_right.kinds == CONSTANT);
-            if (left == right) {
-                token.kind = CONSTANT;
-                token.val = 0;
-                Register* reg = assign_register(token);
-                if (reg == NULL)
-                    err("No available register.");
-                r = reg - registers;
-                printf("add r%d 0 0\n", r);
-                registers[r].changed = true;
-                return r;
-            } else if (!is_lc && !is_rc) {
-                printf("sub r%d r%d r%d\n", left, left, right);
-                registers[left].changed = true;
-                if (left != right)
-                    free_register(right);
-                return left;
-            } else if (!is_lc && is_rc) {
-                printf("sub r%d r%d %d\n", left, left, right);
-                registers[left].changed = true;
-                return left;
-            } else if (is_lc && !is_rc) {
-                printf("sub r%d %d r%d\n", right, left, right);
-                registers[right].changed = true;
-                return right;
-            } else {
-                token.kind = CONSTANT;
-                token.val = left - right;
-                Register* reg = assign_register(token);
-                if (reg == NULL)
-                    err("No available register.");
-                r = reg - registers;
-                printf("sub r%d %d %d\n", r, left, right);
-                registers[r].changed = true;
-                return r;
-            }
-            break;
-        case MUL:
-            left = codegen(root->lhs);
-            right = codegen(root->rhs);
-            node_info_left = get_node_info(root->lhs);
-            is_lc = (node_info_left.kinds == CONSTANT);
-            node_info_right = get_node_info(root->rhs);
-            is_rc = (node_info_right.kinds == CONSTANT);
-            if (!is_lc && !is_rc) {
-                printf("mul r%d r%d r%d\n", left, left, right);
-                registers[left].changed = true;
-                if (left != right)
-                    free_register(right);
-                return left;
-            } else if (!is_lc && is_rc) {
-                printf("mul r%d r%d %d\n", left, left, right);
-                registers[left].changed = true;
-                return left;
-            } else if (is_lc && !is_rc) {
-                printf("mul r%d %d r%d\n", right, left, right);
-                registers[right].changed = true;
-                return right;
-            } else {
-                token.kind = CONSTANT;
-                token.val = left * right;
-                Register* reg = assign_register(token);
-                if (reg == NULL)
-                    err("No available register.");
-                r = reg - registers;
-                printf("mul r%d %d %d\n", r, left, right);
-                registers[r].changed = true;
-                return r;
-            }
-            break;
-        case DIV:
-            left = codegen(root->lhs);
-            right = codegen(root->rhs);
-            node_info_left = get_node_info(root->lhs);
-            is_lc = (node_info_left.kinds == CONSTANT);
-            node_info_right = get_node_info(root->rhs);
-            is_rc = (node_info_right.kinds == CONSTANT);
-            if (!is_lc && !is_rc) {
-                printf("div r%d r%d r%d\n", left, left, right);
-                registers[left].changed = true;
-                if (left != right)
-                    free_register(right);
-                return left;
-            } else if (!is_lc && is_rc) {
-                printf("div r%d r%d %d\n", left, left, right);
-                registers[left].changed = true;
-                return left;
-            } else if (is_lc && !is_rc) {
-                printf("div r%d %d r%d\n", right, left, right);
-                registers[right].changed = true;
-                return right;
-            } else {
-                token.kind = CONSTANT;
-                token.val = left / right;
-                Register* reg = assign_register(token);
-                if (reg == NULL)
-                    err("No available register.");
-                r = reg - registers;
-                printf("div r%d %d %d\n", r, left, right);
-                registers[r].changed = true;
-                return r;
-            }
-            break;
-        case REM:
-            left = codegen(root->lhs);
-            right = codegen(root->rhs);
-            node_info_left = get_node_info(root->lhs);
-            is_lc = (node_info_left.kinds == CONSTANT);
-            node_info_right = get_node_info(root->rhs);
-            is_rc = (node_info_right.kinds == CONSTANT);
-            if (!is_lc && !is_rc) {
-                printf("rem r%d r%d r%d\n", left, left, right);
-                registers[left].changed = true;
-                free_register(right);
-                return left;
-            } else if (!is_lc && is_rc) {
-                printf("rem r%d r%d %d\n", left, left, right);
-                registers[left].changed = true;
-                return left;
-            } else if (is_lc && !is_rc) {
-                printf("rem r%d %d r%d\n", right, left, right);
-                registers[right].changed = true;
-                return right;
-            } else {
-                token.kind = CONSTANT;
-                token.val = left % right;
-                Register* reg = assign_register(token);
-                if (reg == NULL)
-                    err("No available register.");
-                r = reg - registers;
-                printf("rem r%d %d %d\n", r, left, right);
-                registers[r].changed = true;
-                return r;
-            }
-            break;
-        case PREINC:
-            right = codegen(root->mid);
-            node_info_left = get_node_info(root->mid);
-            if (node_info_left.kinds == IDENTIFIER)
-                vr = node_info_left.val;
-            else
-                vr = root->mid->val;
-            printf("add r%d r%d 1\n", right, right);
-            printf("store [%d] r%d\n", get_register_for_variable((char)vr), right);
-            registers[right].changed = true;
-            return right;
-            break;
-        case PREDEC:
-            right = codegen(root->mid);
-            node_info_left = get_node_info(root->mid);
-            if (node_info_left.kinds == IDENTIFIER)
-                vr = node_info_left.val;
-            else
-                vr = root->mid->val;
-            printf("sub r%d r%d 1\n", right, right);
-            printf("store [%d] r%d\n", get_register_for_variable((char)vr), right);
-            registers[right].changed = true;
-            return right;
-            break;
-        case POSTINC:
-            right = codegen(root->mid);
-            node_info_left = get_node_info(root->mid);
-            if (node_info_left.kinds == IDENTIFIER)
-                vr = node_info_left.val;
-            else
-                vr = root->mid->val;
-            token.kind = IDENTIFIER;
-            token.val = vr;
-            Register* reg = assign_register(token);
-            if (reg == NULL)
-                err("No available register.");
-            r = reg - registers;
-            printf("add r%d r%d 1\n", r, r);
-            printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
-            registers[r].changed = true;
-            free_register(r);
-            return right;
-            break;
-        case POSTDEC:
-            right = codegen(root->mid);
-            node_info_left = get_node_info(root->mid);
-            if (node_info_left.kinds == IDENTIFIER)
-                vr = node_info_left.val;
-            else
-                vr = root->mid->val;
-            token.kind = IDENTIFIER;
-            token.val = vr;
-            reg = assign_register(token);
-            if (reg == NULL)
-                err("No available register.");
-            r = reg - registers;
-            printf("sub r%d r%d 1\n", r, r);
-            printf("store [%d] r%d\n", get_register_for_variable((char)vr), r);
-            registers[r].changed = true;
-            free_register(r);
-            return right;
-            break;
-        case IDENTIFIER:
-            token.kind = IDENTIFIER;
-            token.val = root->val;
-            for (int i = 0; i < NUM_REGISTERS; i++)
-                if (registers[i].in_use && !registers[i].changed && registers[i].token.kind == token.kind && registers[i].token.val == token.val) {
-                    // printf("same register\n");
-                    return i;
-                }
-            reg = assign_register(token);
-            if (reg == NULL)
-                err("No available register.");
-            r = reg - registers;
-            printf("load r%d [%d]\n", r, get_register_for_variable((char)root->val));
-            return r;
-            break;
-        case CONSTANT:
-            token.kind = CONSTANT;
-            token.val = root->val;
-            reg = assign_register(token);
-            if (reg == NULL)
-                err("No available register.");
-            r = reg - registers;
-            printf("add r%d 0 %d\n", r, root->val);
-            return r;
-            break;
-        case PLUS:
-            left = codegen(root->mid);
-            return left;
-            break;
-        case MINUS:
-            left = codegen(root->mid);
-            node_info_left = get_node_info(root->mid);
-            is_lc = (node_info_left.kinds == CONSTANT);
-            if (is_lc) {
-                token.kind = CONSTANT;
-                token.val = -left;
-                reg = assign_register(token);
-                if (reg == NULL)
-                    err("No available register.");
-                r = reg - registers;
-                printf("sub r%d 0 %d\n", r, left);
-                registers[r].changed = true;
-                return r;
-            } else {
-                printf("sub r%d 0 r%d\n", left, left);
-                registers[left].changed = true;
-                return left;
-            }
-            break;
-        case LPAR:
-            return codegen(root->mid);
-            break;
-        case RPAR:
-            return codegen(root->mid);
-            break;
-        default:
-            break;
-    }
-    return 0;
-}
-
-//
 
 // no simplify
-int is_constant(AST* root) {  // check is constant or not
+int is_constant(AST* root) {
     while (root->kind == LPAR) {
         if (root->mid->kind != LPAR && root->mid->kind != CONSTANT)
-            return 0;  // is other kind
+            return 0;
         if (root->mid->kind == LPAR)
-            root = root->mid;  // continue find
+            root = root->mid;
         else if (root->mid->kind == CONSTANT)
-            return 1;  // have constant
+            return 1;
         else
             return 0;
     }
 }
 
-int have_identifier(AST* root) {  // check have identifier or not
+int have_identifier(AST* root) {
     while (root->kind == LPAR) {
         if (root->mid->kind != LPAR && root->mid->kind != IDENTIFIER)
-            return 0;  // is other kind
+            return 0;
         if (root->mid->kind == LPAR)
-            root = root->mid;  // continue find
+            root = root->mid;
         else if (root->mid->kind == IDENTIFIER)
-            return root->mid->val;  // return x/y/z
+            return root->mid->val;
         else
             return 0;
     }
@@ -815,10 +392,7 @@ int have_identifier(AST* root) {  // check have identifier or not
 int codegen2(AST* root) {
     if (root == NULL)
         return -1;
-    int lv, rv;        // left and right operand's register
-    int r;             //(new) register
-    int is_lc, is_rc;  // is left or right a constant
-    int vr;            // variable of register
+    int lv, rv, r, is_lc, is_rc, vr;
     switch (root->kind) {
         case ASSIGN:
             vr = have_identifier(root->lhs);
@@ -842,23 +416,14 @@ int codegen2(AST* root) {
                 printf("store [%d] r%d\n", get_register_for_variable(vr), r);
                 reg[rv] = 0;
                 return r;
-            } else {
+            } else
                 printf("store [%d] r%d\n", get_register_for_variable(vr), rv);
-            }
             break;
         case ADD:
             lv = codegen2(root->lhs);
             rv = codegen2(root->rhs);
-            is_lc = 0;
-            is_rc = 0;
-            if (root->lhs->kind == CONSTANT)
-                is_lc = 1;
-            if (root->rhs->kind == CONSTANT)
-                is_rc = 1;
-            if (root->lhs->kind == LPAR && is_constant(root->lhs))
-                is_lc = 1;
-            if (root->rhs->kind == LPAR && is_constant(root->rhs))
-                is_rc = 1;
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
+            is_rc = (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) ? 1 : 0;
             if ((is_lc == 0) & (is_rc == 0)) {
                 printf("add r%d r%d r%d\n", lv, lv, rv);
                 reg[rv] = 0;
@@ -884,12 +449,8 @@ int codegen2(AST* root) {
         case SUB:
             lv = codegen2(root->lhs);
             rv = codegen2(root->rhs);
-            is_lc = 0;
-            is_rc = 0;
-            if (root->lhs->kind == CONSTANT)
-                is_lc = 1;
-            if (root->rhs->kind == CONSTANT)
-                is_rc = 1;
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
+            is_rc = (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) ? 1 : 0;
             if ((is_lc == 0) & (is_rc == 0)) {
                 printf("sub r%d r%d r%d\n", lv, lv, rv);
                 reg[rv] = 0;
@@ -915,12 +476,8 @@ int codegen2(AST* root) {
         case MUL:
             lv = codegen2(root->lhs);
             rv = codegen2(root->rhs);
-            is_lc = 0;
-            is_rc = 0;
-            if (root->lhs->kind == CONSTANT)
-                is_lc = 1;
-            if (root->rhs->kind == CONSTANT)
-                is_rc = 1;
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
+            is_rc = (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) ? 1 : 0;
             if ((is_lc == 0) & (is_rc == 0)) {
                 printf("mul r%d r%d r%d\n", lv, lv, rv);
                 reg[rv] = 0;
@@ -946,19 +503,14 @@ int codegen2(AST* root) {
         case DIV:
             lv = codegen2(root->lhs);
             rv = codegen2(root->rhs);
-            is_lc = 0;
-            is_rc = 0;
-            if (root->lhs->kind == CONSTANT)
-                is_lc = 1;
-            if (root->rhs->kind == CONSTANT)
-                is_rc = 1;
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
+            is_rc = (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) ? 1 : 0;
             if ((is_lc == 0) & (is_rc == 0)) {
-                if (lv != rv) {
+                if (lv != rv) {  // 嘿嘿嘿神秘撇布
                     printf("div r%d r%d r%d\n", lv, lv, rv);
                     reg[rv] = 0;
-                } else {
+                } else
                     printf("add r%d 0 1\n", lv);
-                }
                 return lv;
             } else if ((is_lc == 0) & (is_rc == 1)) {
                 printf("div r%d r%d %d\n", lv, lv, rv);
@@ -981,19 +533,14 @@ int codegen2(AST* root) {
         case REM:
             lv = codegen2(root->lhs);
             rv = codegen2(root->rhs);
-            is_lc = 0;
-            is_rc = 0;
-            if (root->lhs->kind == CONSTANT)
-                is_lc = 1;
-            if (root->rhs->kind == CONSTANT)
-                is_rc = 1;
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
+            is_rc = (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) ? 1 : 0;
             if ((is_lc == 0) & (is_rc == 0)) {
-                if (lv != rv) {
+                if (lv != rv) {  // 嘿嘿嘿神秘撇布
                     printf("rem r%d r%d r%d\n", lv, lv, rv);
                     reg[rv] = 0;
-                } else {
+                } else
                     printf("add r%d 0 0\n", lv);
-                }
                 return lv;
             } else if ((is_lc == 0) & (is_rc == 1)) {
                 printf("rem r%d r%d %d\n", lv, lv, rv);
@@ -1086,10 +633,7 @@ int codegen2(AST* root) {
         case MINUS:
             lv = codegen2(root->mid);
             is_lc = 0;
-            if (root->mid->kind == CONSTANT)
-                is_lc = 1;
-            if (root->mid->kind == LPAR && is_constant(root->mid))
-                is_lc = 1;
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
             if ((is_lc == 1)) {
                 for (int i = 0; i < NUM_REGISTERS; i++) {
                     if (reg[i] == 0) {
@@ -1116,9 +660,7 @@ int codegen2(AST* root) {
     }
     return 0;
 }
-
 //
-
 void freeAST(AST* now) {
     if (now == NULL)
         return;
