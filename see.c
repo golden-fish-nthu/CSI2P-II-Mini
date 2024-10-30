@@ -3,13 +3,10 @@
 #include <string.h>
 
 int main() {
-    int n;
-    // scanf("%d", &n);
-    int s = 0;  // Initialize s
-                // 2+4+6.....+n
-    for (int i = 2; i <= n; i = i + 2) {
-        s += i;
-    }
-    printf("%d\n", s);
+    int x = 2, y = 3, z = 5;
+    // 放testcase
+    printf("x = %d\n", x);
+    printf("y = %d\n", y);
+    printf("z = %d\n", z);
     return 0;
 }

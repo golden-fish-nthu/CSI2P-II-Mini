@@ -7,7 +7,25 @@
 #define NUM_REGISTERS 256
 #define MAX_LENGTH 200
 #define MAX_INSTRUCTIONS 100
-
+typedef enum {
+    ASSIGN,
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    REM,
+    PREINC,
+    PREDEC,
+    POSTINC,
+    POSTDEC,
+    IDENTIFIER,
+    CONSTANT,
+    LPAR,
+    RPAR,
+    PLUS,
+    MINUS,
+    END
+} Kind;
 typedef struct {
     char instruction[MAX_LENGTH];
 } Instruction;
@@ -31,25 +49,6 @@ typedef struct ASTUnit {
     int val;  // 記錄整數值或變量名稱
     struct ASTUnit *lhs, *mid, *rhs;
 } AST;
-typedef enum {
-    ASSIGN,
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-    REM,
-    PREINC,
-    PREDEC,
-    POSTINC,
-    POSTDEC,
-    IDENTIFIER,
-    CONSTANT,
-    LPAR,
-    RPAR,
-    PLUS,
-    MINUS,
-    END
-} Kind;
 typedef struct {
     Kind kinds;
     int val;
@@ -372,7 +371,7 @@ void semantic_check(AST* now) {
     }
     if (now->kind == PREINC || now->kind == PREDEC || now->kind == POSTINC || now->kind == POSTDEC) {
         AST* tmp = now->mid;
-        while (tmp->kind == LPAR)
+        while (tmp->kind == LPAR || tmp->kind == PLUS || tmp->kind == MINUS || tmp->kind == PREDEC || tmp->kind == PREINC || tmp->kind == POSTDEC || tmp->kind == POSTINC)
             tmp = tmp->mid;
         if (tmp->kind != IDENTIFIER)
             err("Operand of INC/DEC must be an identifier or identifier with parentheses.");
@@ -397,7 +396,6 @@ int get_register_for_variable(char var) {
 // simplfiy use
 NodeInfo get_node_info(AST* root) {
     NodeInfo info = {root->kind, root->val};  // 初始化結果
-
     while (root->kind == LPAR) {
         if (root->mid->kind != LPAR && root->mid->kind != CONSTANT && root->mid->kind != IDENTIFIER) {
             info.kinds = root->mid->kind;
@@ -781,7 +779,6 @@ int codegen(AST* root) {
     }
     return 0;
 }
-
 //
 
 // no simplify
@@ -1116,7 +1113,6 @@ int codegen2(AST* root) {
     }
     return 0;
 }
-
 //
 
 void freeAST(AST* now) {

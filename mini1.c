@@ -1,14 +1,12 @@
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/*
-For the language grammar, please refer to Grammar section on the github page:
-  https://github.com/lightbulb12294/CSI2P-II-Mini1#grammar
-*/
-
+#define NUM_REGISTERS 256
 #define MAX_LENGTH 200
+#define MAX_INSTRUCTIONS 100
 typedef enum {
     ASSIGN,
     ADD,
@@ -28,6 +26,9 @@ typedef enum {
     MINUS,
     END
 } Kind;
+typedef struct {
+    char instruction[MAX_LENGTH];
+} Instruction;
 typedef enum {
     STMT,
     EXPR,
@@ -40,18 +41,15 @@ typedef enum {
 } GrammarState;
 typedef struct TokenUnit {
     Kind kind;
-    int val;  // record the integer value or variable name
+    int val;  // 記錄整數值或變量名稱
     struct TokenUnit* next;
 } Token;
 typedef struct ASTUnit {
     Kind kind;
-    int val;  // record the integer value or variable name
+    int val;  // 記錄整數值或變量名稱
     struct ASTUnit *lhs, *mid, *rhs;
 } AST;
 
-/// utility interfaces
-
-// err marco should be used when a expression error occurs.
 #define err(x)                                                \
     {                                                         \
         puts("Compile Error!");                               \
@@ -61,62 +59,31 @@ typedef struct ASTUnit {
         }                                                     \
         exit(0);                                              \
     }
-// You may set DEBUG=1 to debug. Remember setting back to 0 before submit.
+
 #define DEBUG 0
-// Split the input char array into token linked list.
+
 Token* lexer(const char* in);
-// Create a new token.
 Token* new_token(Kind kind, int val);
-// Translate a token linked list into array, return its length.
 size_t token_list_to_arr(Token** head);
-// Parse the token array. Return the constructed AST.
 AST* parser(Token* arr, size_t len);
-// Parse the token array. Return the constructed AST.
 AST* parse(Token* arr, int l, int r, GrammarState S);
-// Create a new AST node.
 AST* new_AST(Kind kind, int val);
-// Find the location of next token that fits the condition(cond). Return -1 if not found. Search direction from start to
-// end.
 int findNextSection(Token* arr, int start, int end, int (*cond)(Kind));
-// Return 1 if kind is ASSIGN.
 int condASSIGN(Kind kind);
-// Return 1 if kind is ADD or SUB.
 int condADD(Kind kind);
-// Return 1 if kind is MUL, DIV, or REM.
 int condMUL(Kind kind);
-// Return 1 if kind is RPAR.
 int condRPAR(Kind kind);
-// Check if the AST is semantically right. This function will call err() automatically if check failed.
 void semantic_check(AST* now);
-// Generate ASM code.
-int codegen(AST* root);
-// Free the whole AST.
 void freeAST(AST* now);
-
-/// debug interfaces
-
-// Print token array.
 void token_print(Token* in, size_t len);
-// Print AST tree.
 void AST_print(AST* head);
+int get_register_for_variable(char var);
+int is_constant(AST* root);
+int have_identifier(AST* root);
+int codegen2(AST* root);
 
 char input[MAX_LENGTH];
-
-#define NUM_REGISTERS 256
-int reg[NUM_REGISTERS] = {0};  // 0 = not used, 1 = used
-
-int get_register_for_variable(char var) {
-    switch (var) {
-        case 'x':
-            return 0;  // x save in memory[0]
-        case 'y':
-            return 4;  // y save in memory[4]
-        case 'z':
-            return 8;  // z save in memory[8]
-        default:
-            return -1;  // error
-    }
-}
+int reg[NUM_REGISTERS] = {0};
 
 int main() {
     while (fgets(input, MAX_LENGTH, stdin) != NULL) {
@@ -126,13 +93,9 @@ int main() {
             continue;
         AST* ast_root = parser(content, len);
         semantic_check(ast_root);
-        for (int i = 0; i < NUM_REGISTERS; i++) {  // Initialize
+        for (int i = 0; i < NUM_REGISTERS; i++)  // Initialize
             reg[i] = 0;
-        }
-        // token_print(content, len);
-        // AST_print(ast_root);
-        semantic_check(ast_root);
-        codegen(ast_root);
+        codegen2(ast_root);
         free(content);
         freeAST(ast_root);
     }
@@ -143,13 +106,13 @@ Token* lexer(const char* in) {
     Token* head = NULL;
     Token** now = &head;
     for (int i = 0; in[i]; i++) {
-        if (isspace(in[i]))  // ignore space characters
+        if (isspace(in[i]))  // 忽略空白字符
             continue;
         else if (isdigit(in[i])) {
             (*now) = new_token(CONSTANT, atoi(in + i));
             while (in[i + 1] && isdigit(in[i + 1]))
                 i++;
-        } else if ('x' <= in[i] && in[i] <= 'z')  // variable
+        } else if ('x' <= in[i] && in[i] <= 'z')  // 變量
             (*now) = new_token(IDENTIFIER, in[i]);
         else
             switch (in[i]) {
@@ -158,21 +121,18 @@ Token* lexer(const char* in) {
                     break;
                 case '+':
                     if (in[i + 1] && in[i + 1] == '+') {
-                        i++;
-                        // In lexer scope, all "++" will be labeled as PREINC.
+                        i++;  // 在lexer範圍內，所有"++"都將被標記為PREINC。
                         (*now) = new_token(PREINC, 0);
-                    }
-                    // In lexer scope, all single "+" will be labeled as PLUS.
+                    }  // 在lexer範圍內，所有單個"+"都將被標記為PLUS。
                     else
                         (*now) = new_token(PLUS, 0);
                     break;
                 case '-':
                     if (in[i + 1] && in[i + 1] == '-') {
-                        i++;
-                        // In lexer scope, all "--" will be labeled as PREDEC.
+                        i++;  // 在lexer範圍內，所有"--"都將被標記為PREDEC。
+
                         (*now) = new_token(PREDEC, 0);
-                    }
-                    // In lexer scope, all single "-" will be labeled as MINUS.
+                    }  // 在lexer範圍內，所有單個"-"都將被標記為MINUS。
                     else
                         (*now) = new_token(MINUS, 0);
                     break;
@@ -228,8 +188,7 @@ size_t token_list_to_arr(Token** head) {
 }
 
 AST* parser(Token* arr, size_t len) {
-    for (int i = 1; i < len; i++) {
-        // correctly identify "ADD" and "SUB"
+    for (int i = 1; i < len; i++) {  // 正確識別"ADD"和"SUB"
         if (arr[i].kind == PLUS || arr[i].kind == MINUS) {
             switch (arr[i - 1].kind) {
                 case PREINC:
@@ -269,7 +228,7 @@ AST* parse(Token* arr, int l, int r, GrammarState S) {
                 return now;
             }
             return parse(arr, l, r, ADD_EXPR);
-        case ADD_EXPR:
+        case ADD_EXPR:  // 加法符
             if ((nxt = findNextSection(arr, r, l, condADD)) != -1) {
                 now = new_AST(arr[nxt].kind, 0);
                 now->lhs = parse(arr, l, nxt - 1, ADD_EXPR);
@@ -277,9 +236,7 @@ AST* parse(Token* arr, int l, int r, GrammarState S) {
                 return now;
             }
             return parse(arr, l, r, MUL_EXPR);
-        case MUL_EXPR:
-            // TODO: Implement MUL_EXPR.
-            // hint: Take ADD_EXPR as reference.
+        case MUL_EXPR:  // 乘法符 TODO
             if ((nxt = findNextSection(arr, r, l, condMUL)) != -1) {
                 now = new_AST(arr[nxt].kind, 0);
                 now->lhs = parse(arr, l, nxt - 1, MUL_EXPR);
@@ -288,17 +245,15 @@ AST* parse(Token* arr, int l, int r, GrammarState S) {
             }
             return parse(arr, l, r, UNARY_EXPR);
         case UNARY_EXPR:
-            // TODO: Implement UNARY_EXPR.
-            // hint: Take POSTFIX_EXPR as reference.
-            if (arr[l].kind == PREINC || arr[l].kind == PREDEC || arr[l].kind == PLUS || arr[l].kind == MINUS) {
+            if (arr[l].kind == SUB || arr[l].kind == MINUS || arr[l].kind == PREINC || arr[l].kind == PREDEC ||
+                arr[l].kind == PLUS) {
                 now = new_AST(arr[l].kind, 0);
                 now->mid = parse(arr, l + 1, r, UNARY_EXPR);
                 return now;
             }
             return parse(arr, l, r, POSTFIX_EXPR);
         case POSTFIX_EXPR:
-            if (arr[r].kind == PREINC || arr[r].kind == PREDEC) {
-                // translate "PREINC", "PREDEC" into "POSTINC", "POSTDEC"
+            if (arr[r].kind == PREINC || arr[r].kind == PREDEC) {  // 將"PREINC"、"PREDEC"轉換為"POSTINC"、"POSTDEC"
                 now = new_AST(arr[r].kind - PREINC + POSTINC, 0);
                 now->mid = parse(arr, l, r - 1, POSTFIX_EXPR);
                 return now;
@@ -315,6 +270,7 @@ AST* parse(Token* arr, int l, int r, GrammarState S) {
                     return new_AST(arr[l].kind, arr[l].val);
                 err("Unexpected token during parsing.");
             }
+            printf("Error at line: %d, l: %d, r: %d\n", __LINE__, l, r);
             err("No token left for parsing.");
         default:
             err("Unexpected grammar state.");
@@ -362,7 +318,6 @@ int condRPAR(Kind kind) {
 void semantic_check(AST* now) {
     if (now == NULL)
         return;
-    // Left operand of '=' must be an identifier or identifier with one or more parentheses.
     if (now->kind == ASSIGN) {
         AST* tmp = now->lhs;
         while (tmp->kind == LPAR)
@@ -370,7 +325,6 @@ void semantic_check(AST* now) {
         if (tmp->kind != IDENTIFIER)
             err("Lvalue is required as left operand of assignment.");
     }
-    // Operand of INC/DEC must be an identifier or identifier with one or more parentheses.
     if (now->kind == PREINC || now->kind == PREDEC || now->kind == POSTINC || now->kind == POSTDEC) {
         AST* tmp = now->mid;
         while (tmp->kind == LPAR)
@@ -378,56 +332,61 @@ void semantic_check(AST* now) {
         if (tmp->kind != IDENTIFIER)
             err("Operand of INC/DEC must be an identifier or identifier with parentheses.");
     }
-    // TODO: Implement the remaining semantic_check code.
-    // hint: Follow the instruction above and ASSIGN-part code to implement.
-    // hint: Semantic of each node needs to be checked recursively (from the current node to lhs/mid/rhs node).
     semantic_check(now->lhs);
     semantic_check(now->mid);
     semantic_check(now->rhs);
 }
 
-// codegen implementation
+int get_register_for_variable(char var) {
+    switch (var) {
+        case 'x':
+            return 0;  // x 存儲在 memory[0]
+        case 'y':
+            return 4;  // y 存儲在 memory[4]
+        case 'z':
+            return 8;  // z 存儲在 memory[8]
+        default:
+            return -1;  // 錯誤
+    }
+}
 
-int is_constant(AST* root) {  // check is constant or not
+int is_constant(AST* root) {
     while (root->kind == LPAR) {
         if (root->mid->kind != LPAR && root->mid->kind != CONSTANT)
-            return 0;  // is other kind
+            return 0;
         if (root->mid->kind == LPAR)
-            root = root->mid;  // continue find
+            root = root->mid;
         else if (root->mid->kind == CONSTANT)
-            return 1;  // have constant
+            return 1;
         else
             return 0;
     }
 }
 
-int have_identifier(AST* root) {  // check have identifier or not
+int have_identifier(AST* root) {
     while (root->kind == LPAR) {
         if (root->mid->kind != LPAR && root->mid->kind != IDENTIFIER)
-            return 0;  // is other kind
+            return 0;
         if (root->mid->kind == LPAR)
-            root = root->mid;  // continue find
+            root = root->mid;
         else if (root->mid->kind == IDENTIFIER)
-            return root->mid->val;  // return x/y/z
+            return root->mid->val;
         else
             return 0;
     }
     return 0;
 }
 
-int codegen(AST* root) {
+int codegen2(AST* root) {
     if (root == NULL)
         return -1;
-    int lv, rv;        // left and right operand's register
-    int r;             //(new) register
-    int is_lc, is_rc;  // is left or right a constant
-    int vr;            // variable of register
+    int lv, rv, r, is_lc, is_rc, vr;
     switch (root->kind) {
         case ASSIGN:
             vr = have_identifier(root->lhs);
             if (vr == 0)
                 vr = root->lhs->val;
-            rv = codegen(root->rhs);
+            rv = codegen2(root->rhs);
             is_rc = 0;
             if (root->rhs->kind == CONSTANT)
                 is_rc = 1;
@@ -445,23 +404,14 @@ int codegen(AST* root) {
                 printf("store [%d] r%d\n", get_register_for_variable(vr), r);
                 reg[rv] = 0;
                 return r;
-            } else {
+            } else
                 printf("store [%d] r%d\n", get_register_for_variable(vr), rv);
-            }
             break;
         case ADD:
-            lv = codegen(root->lhs);
-            rv = codegen(root->rhs);
-            is_lc = 0;
-            is_rc = 0;
-            if (root->lhs->kind == CONSTANT)
-                is_lc = 1;
-            if (root->rhs->kind == CONSTANT)
-                is_rc = 1;
-            if (root->lhs->kind == LPAR && is_constant(root->lhs))
-                is_lc = 1;
-            if (root->rhs->kind == LPAR && is_constant(root->rhs))
-                is_rc = 1;
+            lv = codegen2(root->lhs);
+            rv = codegen2(root->rhs);
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
+            is_rc = (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) ? 1 : 0;
             if ((is_lc == 0) & (is_rc == 0)) {
                 printf("add r%d r%d r%d\n", lv, lv, rv);
                 reg[rv] = 0;
@@ -485,17 +435,14 @@ int codegen(AST* root) {
             }
             break;
         case SUB:
-            lv = codegen(root->lhs);
-            rv = codegen(root->rhs);
-            is_lc = 0;
-            is_rc = 0;
-            if (root->lhs->kind == CONSTANT)
-                is_lc = 1;
-            if (root->rhs->kind == CONSTANT)
-                is_rc = 1;
+            lv = codegen2(root->lhs);
+            rv = codegen2(root->rhs);
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
+            is_rc = (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) ? 1 : 0;
             if ((is_lc == 0) & (is_rc == 0)) {
                 printf("sub r%d r%d r%d\n", lv, lv, rv);
-                reg[rv] = 0;
+                if (lv != rv)
+                    reg[rv] = 0;
                 return lv;
             } else if ((is_lc == 0) & (is_rc == 1)) {
                 printf("sub r%d r%d %d\n", lv, lv, rv);
@@ -516,14 +463,10 @@ int codegen(AST* root) {
             }
             break;
         case MUL:
-            lv = codegen(root->lhs);
-            rv = codegen(root->rhs);
-            is_lc = 0;
-            is_rc = 0;
-            if (root->lhs->kind == CONSTANT)
-                is_lc = 1;
-            if (root->rhs->kind == CONSTANT)
-                is_rc = 1;
+            lv = codegen2(root->lhs);
+            rv = codegen2(root->rhs);
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
+            is_rc = (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) ? 1 : 0;
             if ((is_lc == 0) & (is_rc == 0)) {
                 printf("mul r%d r%d r%d\n", lv, lv, rv);
                 reg[rv] = 0;
@@ -547,17 +490,16 @@ int codegen(AST* root) {
             }
             break;
         case DIV:
-            lv = codegen(root->lhs);
-            rv = codegen(root->rhs);
-            is_lc = 0;
-            is_rc = 0;
-            if (root->lhs->kind == CONSTANT)
-                is_lc = 1;
-            if (root->rhs->kind == CONSTANT)
-                is_rc = 1;
+            lv = codegen2(root->lhs);
+            rv = codegen2(root->rhs);
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
+            is_rc = (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) ? 1 : 0;
             if ((is_lc == 0) & (is_rc == 0)) {
-                printf("div r%d r%d r%d\n", lv, lv, rv);
-                reg[rv] = 0;
+                if (lv != rv) {  // 嘿嘿嘿神秘撇布
+                    printf("div r%d r%d r%d\n", lv, lv, rv);
+                    reg[rv] = 0;
+                } else
+                    printf("add r%d 0 1\n", lv);
                 return lv;
             } else if ((is_lc == 0) & (is_rc == 1)) {
                 printf("div r%d r%d %d\n", lv, lv, rv);
@@ -578,17 +520,16 @@ int codegen(AST* root) {
             }
             break;
         case REM:
-            lv = codegen(root->lhs);
-            rv = codegen(root->rhs);
-            is_lc = 0;
-            is_rc = 0;
-            if (root->lhs->kind == CONSTANT)
-                is_lc = 1;
-            if (root->rhs->kind == CONSTANT)
-                is_rc = 1;
+            lv = codegen2(root->lhs);
+            rv = codegen2(root->rhs);
+            is_lc = (root->lhs->kind == CONSTANT || (root->lhs->kind == LPAR && is_constant(root->lhs))) ? 1 : 0;
+            is_rc = (root->rhs->kind == CONSTANT || (root->rhs->kind == LPAR && is_constant(root->rhs))) ? 1 : 0;
             if ((is_lc == 0) & (is_rc == 0)) {
-                printf("rem r%d r%d r%d\n", lv, lv, rv);
-                reg[rv] = 0;
+                if (lv != rv) {  // 嘿嘿嘿神秘撇布
+                    printf("rem r%d r%d r%d\n", lv, lv, rv);
+                    reg[rv] = 0;
+                } else
+                    printf("add r%d 0 0\n", lv);
                 return lv;
             } else if ((is_lc == 0) & (is_rc == 1)) {
                 printf("rem r%d r%d %d\n", lv, lv, rv);
@@ -609,7 +550,7 @@ int codegen(AST* root) {
             }
             break;
         case PREINC:
-            rv = codegen(root->mid);
+            rv = codegen2(root->mid);
             vr = have_identifier(root->mid);
             if (vr == 0)
                 vr = root->mid->val;
@@ -618,7 +559,7 @@ int codegen(AST* root) {
             return rv;
             break;
         case PREDEC:
-            rv = codegen(root->mid);
+            rv = codegen2(root->mid);
             vr = have_identifier(root->mid);
             if (vr == 0)
                 vr = root->mid->val;
@@ -627,7 +568,7 @@ int codegen(AST* root) {
             return rv;
             break;
         case POSTINC:
-            lv = codegen(root->mid);
+            lv = codegen2(root->mid);
             vr = have_identifier(root->mid);
             if (vr == 0)
                 vr = root->mid->val;
@@ -644,7 +585,7 @@ int codegen(AST* root) {
             return lv;
             break;
         case POSTDEC:
-            lv = codegen(root->mid);
+            lv = codegen2(root->mid);
             vr = have_identifier(root->mid);
             if (vr == 0)
                 vr = root->mid->val;
@@ -675,16 +616,18 @@ int codegen(AST* root) {
             return root->val;
             break;
         case PLUS:
-            lv = codegen(root->mid);
+            lv = codegen2(root->mid);
             return lv;
             break;
         case MINUS:
-            lv = codegen(root->mid);
+            lv = codegen2(root->mid);
+
             is_lc = 0;
-            if (root->mid->kind == CONSTANT)
-                is_lc = 1;
-            if (root->mid->kind == LPAR && is_constant(root->mid))
-                is_lc = 1;
+            if (root->mid == NULL) {
+                err("Unexpected NULL in unary expression.");
+            }
+            is_lc = (root->mid->kind == CONSTANT || (root->mid->kind == LPAR && is_constant(root->mid))) ? 1 : 0;
+
             if ((is_lc == 1)) {
                 for (int i = 0; i < NUM_REGISTERS; i++) {
                     if (reg[i] == 0) {
@@ -701,10 +644,10 @@ int codegen(AST* root) {
             }
             break;
         case LPAR:
-            return codegen(root->mid);
+            return codegen2(root->mid);
             break;
         case RPAR:
-            return codegen(root->mid);
+            return codegen2(root->mid);
             break;
         default:
             break;
@@ -743,19 +686,19 @@ void token_print(Token* in, size_t len) {
             case ASSIGN:
             case PLUS:
             case MINUS:
-                printf(format_str, i, KindName[in[i].kind], "symbol", KindSymbol[in[i].kind]);
+                fprintf(stderr, format_str, i, KindName[in[i].kind], "symbol", KindSymbol[in[i].kind]);
                 break;
             case CONSTANT:
-                printf(format_int, i, KindName[in[i].kind], "value", in[i].val);
+                fprintf(stderr, format_int, i, KindName[in[i].kind], "value", in[i].val);
                 break;
             case IDENTIFIER:
-                printf(format_str, i, KindName[in[i].kind], "name", (char*)(&(in[i].val)));
+                fprintf(stderr, format_str, i, KindName[in[i].kind], "name", (char*)(&(in[i].val)));
                 break;
             case END:
-                printf("<Index = %3d>: %-10s\n", i, KindName[in[i].kind]);
+                fprintf(stderr, "<Index = %3d>: %-10s\n", i, KindName[in[i].kind]);
                 break;
             default:
-                puts("=== unknown token ===");
+                fputs("=== unknown token ===", stderr);
         }
     }
 }
@@ -773,7 +716,7 @@ void AST_print(AST* head) {
         return;
     char* indent_now = indent_str + indent;
     indent_str[indent - 1] = '-';
-    printf("%s", indent_str);
+    fprintf(stderr, "%s", indent_str);
     indent_str[indent - 1] = ' ';
     if (indent_str[indent - 2] == '`')
         indent_str[indent - 2] = ' ';
@@ -792,16 +735,16 @@ void AST_print(AST* head) {
         case RPAR:
         case PLUS:
         case MINUS:
-            printf(format, KindName[head->kind]);
+            fprintf(stderr, format, KindName[head->kind]);
             break;
         case IDENTIFIER:
-            printf(format_str, KindName[head->kind], "name", (char*)&(head->val));
+            fprintf(stderr, format_str, KindName[head->kind], "name", (char*)&(head->val));
             break;
         case CONSTANT:
-            printf(format_val, KindName[head->kind], "value", head->val);
+            fprintf(stderr, format_val, KindName[head->kind], "value", head->val);
             break;
         default:
-            puts("=== unknown AST type ===");
+            fputs("=== unknown AST type ===", stderr);
     }
     indent += 2;
     strcpy(indent_now, "| ");
